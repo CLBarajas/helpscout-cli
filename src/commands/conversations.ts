@@ -66,13 +66,11 @@ export function createConversationsCommand(): Command {
       if (options.type) {
         const types = options.type.split(',').map(t => t.trim().toLowerCase());
         threads = threads.filter(t => types.includes(t.type));
-      } else if (options.all) {
-        // No filtering
-      } else if (options.includeNotes) {
-        threads = threads.filter(t => ['customer', 'message', 'note', 'chat', 'phone'].includes(t.type));
-      } else {
-        // Default: just email communications (customer messages and agent replies)
-        threads = threads.filter(t => ['customer', 'message', 'chat', 'phone'].includes(t.type));
+      } else if (!options.all) {
+        const allowedTypes = options.includeNotes
+          ? ['customer', 'message', 'note', 'chat', 'phone']
+          : ['customer', 'message', 'chat', 'phone'];
+        threads = threads.filter(t => allowedTypes.includes(t.type));
       }
 
       outputJson(threads);
@@ -87,8 +85,8 @@ export function createConversationsCommand(): Command {
       if (!await confirmDelete('conversation', options.yes)) {
         return;
       }
-      const result = await client.deleteConversation(parseInt(id));
-      outputJson({ message: 'Conversation deleted', ...result });
+      await client.deleteConversation(parseInt(id));
+      outputJson({ message: 'Conversation deleted' });
     }));
 
   cmd
@@ -97,8 +95,8 @@ export function createConversationsCommand(): Command {
     .argument('<id>', 'Conversation ID')
     .argument('<tag>', 'Tag name')
     .action(withErrorHandling(async (id: string, tag: string) => {
-      const result = await client.addConversationTag(parseInt(id), tag);
-      outputJson({ message: `Tag "${tag}" added`, ...result });
+      await client.addConversationTag(parseInt(id), tag);
+      outputJson({ message: `Tag "${tag}" added` });
     }));
 
   cmd
@@ -107,8 +105,8 @@ export function createConversationsCommand(): Command {
     .argument('<id>', 'Conversation ID')
     .argument('<tag>', 'Tag name')
     .action(withErrorHandling(async (id: string, tag: string) => {
-      const result = await client.removeConversationTag(parseInt(id), tag);
-      outputJson({ message: `Tag "${tag}" removed`, ...result });
+      await client.removeConversationTag(parseInt(id), tag);
+      outputJson({ message: `Tag "${tag}" removed` });
     }));
 
   cmd
@@ -125,13 +123,13 @@ export function createConversationsCommand(): Command {
       draft?: boolean;
       status?: string;
     }) => {
-      const result = await client.createReply(parseInt(id), {
+      await client.createReply(parseInt(id), {
         text: options.text,
         user: options.user,
         draft: options.draft,
         status: options.status,
       });
-      outputJson({ message: 'Reply sent', ...result });
+      outputJson({ message: 'Reply sent' });
     }));
 
   cmd
@@ -144,11 +142,11 @@ export function createConversationsCommand(): Command {
       text: string;
       user?: number;
     }) => {
-      const result = await client.createNote(parseInt(id), {
+      await client.createNote(parseInt(id), {
         text: options.text,
         user: options.user,
       });
-      outputJson({ message: 'Note added', ...result });
+      outputJson({ message: 'Note added' });
     }));
 
   return cmd;

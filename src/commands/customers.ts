@@ -62,23 +62,12 @@ export function createCustomersCommand(): Command {
       email?: string;
       phone?: string;
     }) => {
-      const data: {
-        firstName?: string;
-        lastName?: string;
-        emails?: Array<{ type: string; value: string }>;
-        phones?: Array<{ type: string; value: string }>;
-      } = {};
-
-      if (options.firstName) data.firstName = options.firstName;
-      if (options.lastName) data.lastName = options.lastName;
-      if (options.email) {
-        data.emails = [{ type: 'work', value: options.email }];
-      }
-      if (options.phone) {
-        data.phones = [{ type: 'work', value: options.phone }];
-      }
-
-      await client.createCustomer(data);
+      await client.createCustomer({
+        ...(options.firstName && { firstName: options.firstName }),
+        ...(options.lastName && { lastName: options.lastName }),
+        ...(options.email && { emails: [{ type: 'work', value: options.email }] }),
+        ...(options.phone && { phones: [{ type: 'work', value: options.phone }] }),
+      });
       outputJson({ message: 'Customer created' });
     }));
 
@@ -100,16 +89,15 @@ export function createCustomersCommand(): Command {
       organization?: string;
       background?: string;
     }) => {
-      const data: Record<string, string> = {};
-      if (options.firstName) data.firstName = options.firstName;
-      if (options.lastName) data.lastName = options.lastName;
-      if (options.jobTitle) data.jobTitle = options.jobTitle;
-      if (options.location) data.location = options.location;
-      if (options.organization) data.organization = options.organization;
-      if (options.background) data.background = options.background;
-
-      const result = await client.updateCustomer(parseInt(id), data);
-      outputJson({ message: 'Customer updated', ...result });
+      await client.updateCustomer(parseInt(id), {
+        ...(options.firstName && { firstName: options.firstName }),
+        ...(options.lastName && { lastName: options.lastName }),
+        ...(options.jobTitle && { jobTitle: options.jobTitle }),
+        ...(options.location && { location: options.location }),
+        ...(options.organization && { organization: options.organization }),
+        ...(options.background && { background: options.background }),
+      });
+      outputJson({ message: 'Customer updated' });
     }));
 
   cmd
@@ -121,8 +109,8 @@ export function createCustomersCommand(): Command {
       if (!await confirmDelete('customer', options.yes)) {
         return;
       }
-      const result = await client.deleteCustomer(parseInt(id));
-      outputJson({ message: 'Customer deleted', ...result });
+      await client.deleteCustomer(parseInt(id));
+      outputJson({ message: 'Customer deleted' });
     }));
 
   return cmd;

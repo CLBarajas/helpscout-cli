@@ -1,6 +1,5 @@
 import { auth } from './auth.js';
-import { config } from './config.js';
-import { HelpScoutCliError, handleHelpScoutError } from './errors.js';
+import { HelpScoutCliError } from './errors.js';
 import dotenv from 'dotenv';
 import type {
   Conversation,
@@ -110,22 +109,6 @@ export class HelpScoutClient {
     return this.refreshAccessToken();
   }
 
-  async getMailboxId(mailboxIdOrDefault?: string): Promise<string> {
-    const mailboxId =
-      mailboxIdOrDefault ||
-      config.getDefaultMailbox() ||
-      process.env.HELPSCOUT_MAILBOX_ID;
-
-    if (!mailboxId) {
-      throw new HelpScoutCliError(
-        'No mailbox specified. Use --mailbox flag, set default with "helpscout mailboxes set-default", or set HELPSCOUT_MAILBOX_ID environment variable',
-        400,
-      );
-    }
-
-    return mailboxId;
-  }
-
   private async request<T>(
     method: string,
     path: string,
@@ -177,13 +160,6 @@ export class HelpScoutClient {
     return response.json() as Promise<T>;
   }
 
-  private async withErrorHandling<T>(fn: () => Promise<T>): Promise<T> {
-    try {
-      return await fn();
-    } catch (error) {
-      handleHelpScoutError(error);
-    }
-  }
 
   // Conversations
   async listConversations(params: {
@@ -197,34 +173,28 @@ export class HelpScoutClient {
     page?: number;
     embed?: string;
   } = {}) {
-    return this.withErrorHandling(async () => {
-      const response = await this.request<PaginatedResponse<{ conversations: Conversation[] }>>(
-        'GET',
-        '/conversations',
-        { params },
-      );
-      return {
-        conversations: response._embedded?.conversations || [],
-        page: response.page,
-      };
-    });
+    const response = await this.request<PaginatedResponse<{ conversations: Conversation[] }>>(
+      'GET',
+      '/conversations',
+      { params },
+    );
+    return {
+      conversations: response._embedded?.conversations || [],
+      page: response.page,
+    };
   }
 
   async getConversation(conversationId: number, embed?: string) {
-    return this.withErrorHandling(async () => {
-      const params = embed ? { embed } : undefined;
-      return this.request<Conversation>('GET', `/conversations/${conversationId}`, { params });
-    });
+    const params = embed ? { embed } : undefined;
+    return this.request<Conversation>('GET', `/conversations/${conversationId}`, { params });
   }
 
   async getConversationThreads(conversationId: number) {
-    return this.withErrorHandling(async () => {
-      const response = await this.request<PaginatedResponse<{ threads: Thread[] }>>(
-        'GET',
-        `/conversations/${conversationId}/threads`,
-      );
-      return response._embedded?.threads || [];
-    });
+    const response = await this.request<PaginatedResponse<{ threads: Thread[] }>>(
+      'GET',
+      `/conversations/${conversationId}/threads`,
+    );
+    return response._embedded?.threads || [];
   }
 
   async updateConversation(
@@ -235,37 +205,25 @@ export class HelpScoutClient {
       value: unknown;
     }>,
   ) {
-    return this.withErrorHandling(async () => {
-      await this.request<void>('PATCH', `/conversations/${conversationId}`, { body: data });
-      return { success: true };
-    });
+    await this.request<void>('PATCH', `/conversations/${conversationId}`, { body: data });
   }
 
   async deleteConversation(conversationId: number) {
-    return this.withErrorHandling(async () => {
-      await this.request<void>('DELETE', `/conversations/${conversationId}`);
-      return { success: true };
-    });
+    await this.request<void>('DELETE', `/conversations/${conversationId}`);
   }
 
   async addConversationTag(conversationId: number, tag: string) {
-    return this.withErrorHandling(async () => {
-      await this.request<void>('PUT', `/conversations/${conversationId}/tags`, {
-        body: { tags: [tag] },
-      });
-      return { success: true };
+    await this.request<void>('PUT', `/conversations/${conversationId}/tags`, {
+      body: { tags: [tag] },
     });
   }
 
   async removeConversationTag(conversationId: number, tag: string) {
-    return this.withErrorHandling(async () => {
-      const conversation = await this.getConversation(conversationId);
-      const existingTags = conversation?.tags?.map(t => t.name) || [];
-      const newTags = existingTags.filter(t => t !== tag);
-      await this.request<void>('PUT', `/conversations/${conversationId}/tags`, {
-        body: { tags: newTags },
-      });
-      return { success: true };
+    const conversation = await this.getConversation(conversationId);
+    const existingTags = conversation?.tags?.map(t => t.name) || [];
+    const newTags = existingTags.filter(t => t !== tag);
+    await this.request<void>('PUT', `/conversations/${conversationId}/tags`, {
+      body: { tags: newTags },
     });
   }
 
@@ -278,10 +236,7 @@ export class HelpScoutClient {
       status?: string;
     },
   ) {
-    return this.withErrorHandling(async () => {
-      await this.request<void>('POST', `/conversations/${conversationId}/reply`, { body: data });
-      return { success: true };
-    });
+    await this.request<void>('POST', `/conversations/${conversationId}/reply`, { body: data });
   }
 
   async createNote(
@@ -291,10 +246,7 @@ export class HelpScoutClient {
       user?: number;
     },
   ) {
-    return this.withErrorHandling(async () => {
-      await this.request<void>('POST', `/conversations/${conversationId}/notes`, { body: data });
-      return { success: true };
-    });
+    await this.request<void>('POST', `/conversations/${conversationId}/notes`, { body: data });
   }
 
   // Customers
@@ -308,23 +260,19 @@ export class HelpScoutClient {
     page?: number;
     query?: string;
   } = {}) {
-    return this.withErrorHandling(async () => {
-      const response = await this.request<PaginatedResponse<{ customers: Customer[] }>>(
-        'GET',
-        '/customers',
-        { params },
-      );
-      return {
-        customers: response._embedded?.customers || [],
-        page: response.page,
-      };
-    });
+    const response = await this.request<PaginatedResponse<{ customers: Customer[] }>>(
+      'GET',
+      '/customers',
+      { params },
+    );
+    return {
+      customers: response._embedded?.customers || [],
+      page: response.page,
+    };
   }
 
   async getCustomer(customerId: number) {
-    return this.withErrorHandling(async () => {
-      return this.request<Customer>('GET', `/customers/${customerId}`);
-    });
+    return this.request<Customer>('GET', `/customers/${customerId}`);
   }
 
   async createCustomer(data: {
@@ -333,10 +281,7 @@ export class HelpScoutClient {
     emails?: Array<{ type: string; value: string }>;
     phones?: Array<{ type: string; value: string }>;
   }) {
-    return this.withErrorHandling(async () => {
-      const response = await this.request<void>('POST', '/customers', { body: data });
-      return response;
-    });
+    await this.request<void>('POST', '/customers', { body: data });
   }
 
   async updateCustomer(
@@ -350,38 +295,28 @@ export class HelpScoutClient {
       background: string;
     }>,
   ) {
-    return this.withErrorHandling(async () => {
-      await this.request<void>('PUT', `/customers/${customerId}`, { body: data });
-      return { success: true };
-    });
+    await this.request<void>('PUT', `/customers/${customerId}`, { body: data });
   }
 
   async deleteCustomer(customerId: number) {
-    return this.withErrorHandling(async () => {
-      await this.request<void>('DELETE', `/customers/${customerId}`);
-      return { success: true };
-    });
+    await this.request<void>('DELETE', `/customers/${customerId}`);
   }
 
   // Tags
   async listTags(page?: number) {
-    return this.withErrorHandling(async () => {
-      const response = await this.request<PaginatedResponse<{ tags: Tag[] }>>(
-        'GET',
-        '/tags',
-        { params: page ? { page } : undefined },
-      );
-      return {
-        tags: response._embedded?.tags || [],
-        page: response.page,
-      };
-    });
+    const response = await this.request<PaginatedResponse<{ tags: Tag[] }>>(
+      'GET',
+      '/tags',
+      { params: page ? { page } : undefined },
+    );
+    return {
+      tags: response._embedded?.tags || [],
+      page: response.page,
+    };
   }
 
   async getTag(tagId: number) {
-    return this.withErrorHandling(async () => {
-      return this.request<Tag>('GET', `/tags/${tagId}`);
-    });
+    return this.request<Tag>('GET', `/tags/${tagId}`);
   }
 
   // Workflows
@@ -390,56 +325,44 @@ export class HelpScoutClient {
     type?: string;
     page?: number;
   } = {}) {
-    return this.withErrorHandling(async () => {
-      const response = await this.request<PaginatedResponse<{ workflows: Workflow[] }>>(
-        'GET',
-        '/workflows',
-        { params },
-      );
-      return {
-        workflows: response._embedded?.workflows || [],
-        page: response.page,
-      };
-    });
+    const response = await this.request<PaginatedResponse<{ workflows: Workflow[] }>>(
+      'GET',
+      '/workflows',
+      { params },
+    );
+    return {
+      workflows: response._embedded?.workflows || [],
+      page: response.page,
+    };
   }
 
   async runWorkflow(workflowId: number, conversationIds: number[]) {
-    return this.withErrorHandling(async () => {
-      await this.request<void>('POST', `/workflows/${workflowId}/run`, {
-        body: { conversationIds },
-      });
-      return { success: true };
+    await this.request<void>('POST', `/workflows/${workflowId}/run`, {
+      body: { conversationIds },
     });
   }
 
   async updateWorkflowStatus(workflowId: number, status: 'active' | 'inactive') {
-    return this.withErrorHandling(async () => {
-      await this.request<void>('PATCH', `/workflows/${workflowId}`, {
-        body: { op: 'replace', path: '/status', value: status },
-      });
-      return { success: true };
+    await this.request<void>('PATCH', `/workflows/${workflowId}`, {
+      body: { op: 'replace', path: '/status', value: status },
     });
   }
 
   // Mailboxes
   async listMailboxes(page?: number) {
-    return this.withErrorHandling(async () => {
-      const response = await this.request<PaginatedResponse<{ mailboxes: Mailbox[] }>>(
-        'GET',
-        '/mailboxes',
-        { params: page ? { page } : undefined },
-      );
-      return {
-        mailboxes: response._embedded?.mailboxes || [],
-        page: response.page,
-      };
-    });
+    const response = await this.request<PaginatedResponse<{ mailboxes: Mailbox[] }>>(
+      'GET',
+      '/mailboxes',
+      { params: page ? { page } : undefined },
+    );
+    return {
+      mailboxes: response._embedded?.mailboxes || [],
+      page: response.page,
+    };
   }
 
   async getMailbox(mailboxId: number) {
-    return this.withErrorHandling(async () => {
-      return this.request<Mailbox>('GET', `/mailboxes/${mailboxId}`);
-    });
+    return this.request<Mailbox>('GET', `/mailboxes/${mailboxId}`);
   }
 }
 

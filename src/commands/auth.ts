@@ -42,8 +42,6 @@ export function createAuthCommand(): Command {
       outputJson({
         authenticated: hasToken,
         configured: hasAppId && hasAppSecret,
-        hasAccessToken: hasToken,
-        hasAppCredentials: hasAppId && hasAppSecret,
       });
     }));
 
