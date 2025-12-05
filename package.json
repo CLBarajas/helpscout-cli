@@ -15,6 +15,7 @@
     "typecheck": "tsc --noEmit",
     "link": "npm run build && npm link",
     "start": "node dist/cli.js",
+    "audit": "npm audit --audit-level=moderate",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
