@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { client } from '../lib/api-client.js';
 import { outputJson } from '../lib/output.js';
-import { withErrorHandling } from '../lib/command-utils.js';
+import { withErrorHandling, parseIdArg } from '../lib/command-utils.js';
 
 export function createWorkflowsCommand(): Command {
   const cmd = new Command('workflows').description('Workflow operations');
@@ -31,8 +31,8 @@ export function createWorkflowsCommand(): Command {
     .argument('<workflow-id>', 'Workflow ID')
     .requiredOption('--conversations <ids>', 'Comma-separated conversation IDs')
     .action(withErrorHandling(async (workflowId: string, options: { conversations: string }) => {
-      const conversationIds = options.conversations.split(',').map(id => parseInt(id.trim()));
-      await client.runWorkflow(parseInt(workflowId), conversationIds);
+      const conversationIds = options.conversations.split(',').map(id => parseIdArg(id.trim(), 'conversation'));
+      await client.runWorkflow(parseIdArg(workflowId, 'workflow'), conversationIds);
       outputJson({ message: 'Workflow executed' });
     }));
 
@@ -41,7 +41,7 @@ export function createWorkflowsCommand(): Command {
     .description('Activate a workflow')
     .argument('<id>', 'Workflow ID')
     .action(withErrorHandling(async (id: string) => {
-      await client.updateWorkflowStatus(parseInt(id), 'active');
+      await client.updateWorkflowStatus(parseIdArg(id, 'workflow'), 'active');
       outputJson({ message: 'Workflow activated' });
     }));
 
@@ -50,7 +50,7 @@ export function createWorkflowsCommand(): Command {
     .description('Deactivate a workflow')
     .argument('<id>', 'Workflow ID')
     .action(withErrorHandling(async (id: string) => {
-      await client.updateWorkflowStatus(parseInt(id), 'inactive');
+      await client.updateWorkflowStatus(parseIdArg(id, 'workflow'), 'inactive');
       outputJson({ message: 'Workflow deactivated' });
     }));
 

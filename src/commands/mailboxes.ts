@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { client } from '../lib/api-client.js';
 import { config } from '../lib/config.js';
 import { outputJson } from '../lib/output.js';
-import { withErrorHandling } from '../lib/command-utils.js';
+import { withErrorHandling, parseIdArg } from '../lib/command-utils.js';
 
 export function createMailboxesCommand(): Command {
   const cmd = new Command('mailboxes').description('Mailbox operations');
@@ -21,7 +21,7 @@ export function createMailboxesCommand(): Command {
     .description('View a mailbox')
     .argument('<id>', 'Mailbox ID')
     .action(withErrorHandling(async (id: string) => {
-      const mailbox = await client.getMailbox(parseInt(id));
+      const mailbox = await client.getMailbox(parseIdArg(id, 'mailbox'));
       outputJson(mailbox);
     }));
 
@@ -30,8 +30,9 @@ export function createMailboxesCommand(): Command {
     .description('Set default mailbox')
     .argument('<id>', 'Mailbox ID')
     .action(withErrorHandling(async (id: string) => {
-      config.setDefaultMailbox(id);
-      outputJson({ message: `Default mailbox set to ${id}` });
+      const mailboxId = parseIdArg(id, 'mailbox');
+      config.setDefaultMailbox(String(mailboxId));
+      outputJson({ message: `Default mailbox set to ${mailboxId}` });
     }));
 
   cmd

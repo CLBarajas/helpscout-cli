@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { client } from '../lib/api-client.js';
 import { outputJson } from '../lib/output.js';
-import { withErrorHandling } from '../lib/command-utils.js';
+import { withErrorHandling, parseIdArg } from '../lib/command-utils.js';
 
 export function createTagsCommand(): Command {
   const cmd = new Command('tags').description('Tag operations');
@@ -20,7 +20,7 @@ export function createTagsCommand(): Command {
     .description('View a tag')
     .argument('<id>', 'Tag ID')
     .action(withErrorHandling(async (id: string) => {
-      const tag = await client.getTag(parseInt(id));
+      const tag = await client.getTag(parseIdArg(id, 'tag'));
       outputJson(tag);
     }));
 

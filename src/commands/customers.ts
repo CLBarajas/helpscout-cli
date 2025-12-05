@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { client } from '../lib/api-client.js';
 import { outputJson } from '../lib/output.js';
-import { withErrorHandling, confirmDelete } from '../lib/command-utils.js';
+import { withErrorHandling, confirmDelete, parseIdArg } from '../lib/command-utils.js';
 
 export function createCustomersCommand(): Command {
   const cmd = new Command('customers').description('Customer operations');
@@ -45,7 +45,7 @@ export function createCustomersCommand(): Command {
     .description('View a customer')
     .argument('<id>', 'Customer ID')
     .action(withErrorHandling(async (id: string) => {
-      const customer = await client.getCustomer(parseInt(id));
+      const customer = await client.getCustomer(parseIdArg(id, 'customer'));
       outputJson(customer);
     }));
 
@@ -89,7 +89,7 @@ export function createCustomersCommand(): Command {
       organization?: string;
       background?: string;
     }) => {
-      await client.updateCustomer(parseInt(id), {
+      await client.updateCustomer(parseIdArg(id, 'customer'), {
         ...(options.firstName && { firstName: options.firstName }),
         ...(options.lastName && { lastName: options.lastName }),
         ...(options.jobTitle && { jobTitle: options.jobTitle }),
@@ -106,10 +106,8 @@ export function createCustomersCommand(): Command {
     .argument('<id>', 'Customer ID')
     .option('-y, --yes', 'Skip confirmation')
     .action(withErrorHandling(async (id: string, options: { yes?: boolean }) => {
-      if (!await confirmDelete('customer', options.yes)) {
-        return;
-      }
-      await client.deleteCustomer(parseInt(id));
+      await confirmDelete('customer', options.yes);
+      await client.deleteCustomer(parseIdArg(id, 'customer'));
       outputJson({ message: 'Customer deleted' });
     }));
 

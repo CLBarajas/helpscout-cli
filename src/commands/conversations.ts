@@ -1,7 +1,7 @@
 import { Command } from 'commander';
 import { client } from '../lib/api-client.js';
 import { outputJson } from '../lib/output.js';
-import { withErrorHandling, confirmDelete } from '../lib/command-utils.js';
+import { withErrorHandling, confirmDelete, parseIdArg } from '../lib/command-utils.js';
 
 export function createConversationsCommand(): Command {
   const cmd = new Command('conversations').description('Conversation operations');
@@ -49,7 +49,7 @@ export function createConversationsCommand(): Command {
     .argument('<id>', 'Conversation ID')
     .option('--embed <resources>', 'Embed resources (threads)')
     .action(withErrorHandling(async (id: string, options: { embed?: string }) => {
-      const conversation = await client.getConversation(parseInt(id), options.embed);
+      const conversation = await client.getConversation(parseIdArg(id, 'conversation'), options.embed);
       outputJson(conversation);
     }));
 
@@ -61,7 +61,7 @@ export function createConversationsCommand(): Command {
     .option('--all', 'Show all thread types including lineitems, workflows, etc.')
     .option('-t, --type <types>', 'Filter by specific thread type(s), comma-separated (customer, message, note, lineitem, chat, phone, forwardchild, forwardparent, beaconchat)')
     .action(withErrorHandling(async (id: string, options: { includeNotes?: boolean; all?: boolean; type?: string }) => {
-      let threads = await client.getConversationThreads(parseInt(id));
+      let threads = await client.getConversationThreads(parseIdArg(id, 'conversation'));
 
       if (options.type) {
         const types = options.type.split(',').map(t => t.trim().toLowerCase());
@@ -82,10 +82,8 @@ export function createConversationsCommand(): Command {
     .argument('<id>', 'Conversation ID')
     .option('-y, --yes', 'Skip confirmation')
     .action(withErrorHandling(async (id: string, options: { yes?: boolean }) => {
-      if (!await confirmDelete('conversation', options.yes)) {
-        return;
-      }
-      await client.deleteConversation(parseInt(id));
+      await confirmDelete('conversation', options.yes);
+      await client.deleteConversation(parseIdArg(id, 'conversation'));
       outputJson({ message: 'Conversation deleted' });
     }));
 
@@ -95,7 +93,7 @@ export function createConversationsCommand(): Command {
     .argument('<id>', 'Conversation ID')
     .argument('<tag>', 'Tag name')
     .action(withErrorHandling(async (id: string, tag: string) => {
-      await client.addConversationTag(parseInt(id), tag);
+      await client.addConversationTag(parseIdArg(id, 'conversation'), tag);
       outputJson({ message: `Tag "${tag}" added` });
     }));
 
@@ -105,7 +103,7 @@ export function createConversationsCommand(): Command {
     .argument('<id>', 'Conversation ID')
     .argument('<tag>', 'Tag name')
     .action(withErrorHandling(async (id: string, tag: string) => {
-      await client.removeConversationTag(parseInt(id), tag);
+      await client.removeConversationTag(parseIdArg(id, 'conversation'), tag);
       outputJson({ message: `Tag "${tag}" removed` });
     }));
 
@@ -123,7 +121,7 @@ export function createConversationsCommand(): Command {
       draft?: boolean;
       status?: string;
     }) => {
-      await client.createReply(parseInt(id), {
+      await client.createReply(parseIdArg(id, 'conversation'), {
         text: options.text,
         user: options.user,
         draft: options.draft,
@@ -142,7 +140,7 @@ export function createConversationsCommand(): Command {
       text: string;
       user?: number;
     }) => {
-      await client.createNote(parseInt(id), {
+      await client.createNote(parseIdArg(id, 'conversation'), {
         text: options.text,
         user: options.user,
       });

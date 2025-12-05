@@ -1,5 +1,5 @@
 import { auth } from './auth.js';
-import { HelpScoutCliError } from './errors.js';
+import { HelpScoutCliError, HelpScoutApiError } from './errors.js';
 import dotenv from 'dotenv';
 import type {
   Conversation,
@@ -86,7 +86,7 @@ export class HelpScoutClient {
 
     if (!response.ok) {
       const error = await response.json();
-      throw { ...error, statusCode: response.status };
+      throw new HelpScoutApiError('OAuth token request failed', error, response.status);
     }
 
     const data = (await response.json()) as TokenResponse;
@@ -154,7 +154,7 @@ export class HelpScoutClient {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw { ...error, statusCode: response.status };
+      throw new HelpScoutApiError('API request failed', error, response.status);
     }
 
     return response.json() as Promise<T>;

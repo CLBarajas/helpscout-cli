@@ -1,4 +1,5 @@
-import { handleHelpScoutError } from './errors.js';
+import { handleHelpScoutError, HelpScoutCliError } from './errors.js';
+import { outputJson } from './output.js';
 
 export function withErrorHandling<T extends unknown[], R>(
   fn: (...args: T) => Promise<R>,
@@ -10,6 +11,14 @@ export function withErrorHandling<T extends unknown[], R>(
       handleHelpScoutError(error);
     }
   };
+}
+
+export function parseIdArg(value: string, resourceType: string = 'resource'): number {
+  const parsed = parseInt(value, 10);
+  if (isNaN(parsed) || parsed <= 0) {
+    throw new HelpScoutCliError(`Invalid ${resourceType} ID: "${value}"`, 400);
+  }
+  return parsed;
 }
 
 export async function confirmDelete(
@@ -29,7 +38,11 @@ export async function confirmDelete(
   return new Promise((resolve) => {
     rl.question(`Delete ${resourceType}? (y/N) `, (answer) => {
       rl.close();
-      resolve(answer.toLowerCase() === 'y');
+      if (answer.toLowerCase() !== 'y') {
+        outputJson({ cancelled: true, message: 'Deletion cancelled' });
+        process.exit(0);
+      }
+      resolve(true);
     });
   });
 }

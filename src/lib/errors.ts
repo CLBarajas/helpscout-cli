@@ -11,6 +11,17 @@ export class HelpScoutCliError extends Error {
   }
 }
 
+export class HelpScoutApiError extends Error {
+  constructor(
+    message: string,
+    public apiError: unknown,
+    public statusCode: number,
+  ) {
+    super(message);
+    this.name = 'HelpScoutApiError';
+  }
+}
+
 const ERROR_STATUS_CODES: Record<string, number> = {
   bad_request: 400,
   unauthorized: 401,
@@ -83,40 +94,42 @@ export function sanitizeApiError(error: unknown): HelpScoutError {
   };
 }
 
-function enhanceRateLimitMessage(detail: string): string {
-  return `${detail}\n\nHelp Scout API limit: 200 requests/minute. Wait a moment and retry.`;
-}
-
 function formatErrorResponse(name: string, detail: string, statusCode: number): never {
-  const enhancedDetail = name === 'too_many_requests'
-    ? enhanceRateLimitMessage(detail)
-    : detail;
+  const hint = name === 'too_many_requests'
+    ? 'Help Scout API limit: 200 requests/minute. Wait a moment and retry.'
+    : undefined;
 
-  outputJson({ error: { name, detail: enhancedDetail, statusCode } });
+  const response: { error: { name: string; detail: string; statusCode: number }; hint?: string } = {
+    error: { name, detail, statusCode },
+  };
+
+  if (hint) {
+    response.hint = hint;
+  }
+
+  outputJson(response);
   process.exit(1);
 }
 
 export function handleHelpScoutError(error: unknown): never {
-  if (!isErrorObject(error)) {
-    formatErrorResponse('unknown_error', 'An unexpected error occurred', 1);
-  }
-
-  const errorObj = error as { error?: unknown; message?: string; statusCode?: number };
-
   if (error instanceof HelpScoutCliError) {
     const sanitized = sanitizeErrorMessage(error.message);
     formatErrorResponse('cli_error', sanitized, error.statusCode || 1);
   }
 
-  if (errorObj.error) {
-    const hsError: HelpScoutError = sanitizeApiError(errorObj);
+  if (error instanceof HelpScoutApiError) {
+    const hsError: HelpScoutError = sanitizeApiError(error.apiError);
     formatErrorResponse(
       hsError.name,
       hsError.detail,
-      errorObj.statusCode || ERROR_STATUS_CODES[hsError.name] || 500,
+      error.statusCode || ERROR_STATUS_CODES[hsError.name] || 500,
     );
   }
 
-  const sanitized = sanitizeErrorMessage(errorObj.message || 'An unexpected error occurred');
-  formatErrorResponse('unknown_error', sanitized, errorObj.statusCode || 1);
+  if (error instanceof Error) {
+    const sanitized = sanitizeErrorMessage(error.message);
+    formatErrorResponse('unknown_error', sanitized, 1);
+  }
+
+  formatErrorResponse('unknown_error', 'An unexpected error occurred', 1);
 }
