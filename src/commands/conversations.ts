@@ -1,0 +1,155 @@
+import { Command } from 'commander';
+import { client } from '../lib/api-client.js';
+import { outputJson } from '../lib/output.js';
+import { withErrorHandling, confirmDelete } from '../lib/command-utils.js';
+
+export function createConversationsCommand(): Command {
+  const cmd = new Command('conversations').description('Conversation operations');
+
+  cmd
+    .command('list')
+    .description('List conversations')
+    .option('-m, --mailbox <id>', 'Filter by mailbox ID')
+    .option('-s, --status <status>', 'Filter by status (active, all, closed, open, pending, spam)')
+    .option('-t, --tag <tags>', 'Filter by tag(s), comma-separated')
+    .option('--assigned-to <id>', 'Filter by assignee user ID')
+    .option('--modified-since <date>', 'Filter by modified date (ISO 8601)')
+    .option('--sort-field <field>', 'Sort by field (createdAt, modifiedAt, number, status, subject)')
+    .option('--sort-order <order>', 'Sort order (asc, desc)')
+    .option('--page <number>', 'Page number', parseInt)
+    .option('--embed <resources>', 'Embed resources (threads)')
+    .action(withErrorHandling(async (options: {
+      mailbox?: string;
+      status?: string;
+      tag?: string;
+      assignedTo?: string;
+      modifiedSince?: string;
+      sortField?: string;
+      sortOrder?: string;
+      page?: number;
+      embed?: string;
+    }) => {
+      const result = await client.listConversations({
+        mailbox: options.mailbox,
+        status: options.status,
+        tag: options.tag,
+        assignedTo: options.assignedTo,
+        modifiedSince: options.modifiedSince,
+        sortField: options.sortField,
+        sortOrder: options.sortOrder,
+        page: options.page,
+        embed: options.embed,
+      });
+      outputJson(result);
+    }));
+
+  cmd
+    .command('view')
+    .description('View a conversation')
+    .argument('<id>', 'Conversation ID')
+    .option('--embed <resources>', 'Embed resources (threads)')
+    .action(withErrorHandling(async (id: string, options: { embed?: string }) => {
+      const conversation = await client.getConversation(parseInt(id), options.embed);
+      outputJson(conversation);
+    }));
+
+  cmd
+    .command('threads')
+    .description('List threads for a conversation (defaults to email communications only)')
+    .argument('<id>', 'Conversation ID')
+    .option('--include-notes', 'Include internal notes')
+    .option('--all', 'Show all thread types including lineitems, workflows, etc.')
+    .option('-t, --type <types>', 'Filter by specific thread type(s), comma-separated (customer, message, note, lineitem, chat, phone, forwardchild, forwardparent, beaconchat)')
+    .action(withErrorHandling(async (id: string, options: { includeNotes?: boolean; all?: boolean; type?: string }) => {
+      let threads = await client.getConversationThreads(parseInt(id));
+
+      if (options.type) {
+        const types = options.type.split(',').map(t => t.trim().toLowerCase());
+        threads = threads.filter(t => types.includes(t.type));
+      } else if (options.all) {
+        // No filtering
+      } else if (options.includeNotes) {
+        threads = threads.filter(t => ['customer', 'message', 'note', 'chat', 'phone'].includes(t.type));
+      } else {
+        // Default: just email communications (customer messages and agent replies)
+        threads = threads.filter(t => ['customer', 'message', 'chat', 'phone'].includes(t.type));
+      }
+
+      outputJson(threads);
+    }));
+
+  cmd
+    .command('delete')
+    .description('Delete a conversation')
+    .argument('<id>', 'Conversation ID')
+    .option('-y, --yes', 'Skip confirmation')
+    .action(withErrorHandling(async (id: string, options: { yes?: boolean }) => {
+      if (!await confirmDelete('conversation', options.yes)) {
+        return;
+      }
+      const result = await client.deleteConversation(parseInt(id));
+      outputJson({ message: 'Conversation deleted', ...result });
+    }));
+
+  cmd
+    .command('add-tag')
+    .description('Add a tag to a conversation')
+    .argument('<id>', 'Conversation ID')
+    .argument('<tag>', 'Tag name')
+    .action(withErrorHandling(async (id: string, tag: string) => {
+      const result = await client.addConversationTag(parseInt(id), tag);
+      outputJson({ message: `Tag "${tag}" added`, ...result });
+    }));
+
+  cmd
+    .command('remove-tag')
+    .description('Remove a tag from a conversation')
+    .argument('<id>', 'Conversation ID')
+    .argument('<tag>', 'Tag name')
+    .action(withErrorHandling(async (id: string, tag: string) => {
+      const result = await client.removeConversationTag(parseInt(id), tag);
+      outputJson({ message: `Tag "${tag}" removed`, ...result });
+    }));
+
+  cmd
+    .command('reply')
+    .description('Reply to a conversation')
+    .argument('<id>', 'Conversation ID')
+    .requiredOption('--text <text>', 'Reply text')
+    .option('--user <id>', 'User ID sending the reply', parseInt)
+    .option('--draft', 'Save as draft')
+    .option('--status <status>', 'Set conversation status after reply (active, closed, pending)')
+    .action(withErrorHandling(async (id: string, options: {
+      text: string;
+      user?: number;
+      draft?: boolean;
+      status?: string;
+    }) => {
+      const result = await client.createReply(parseInt(id), {
+        text: options.text,
+        user: options.user,
+        draft: options.draft,
+        status: options.status,
+      });
+      outputJson({ message: 'Reply sent', ...result });
+    }));
+
+  cmd
+    .command('note')
+    .description('Add a note to a conversation')
+    .argument('<id>', 'Conversation ID')
+    .requiredOption('--text <text>', 'Note text')
+    .option('--user <id>', 'User ID adding the note', parseInt)
+    .action(withErrorHandling(async (id: string, options: {
+      text: string;
+      user?: number;
+    }) => {
+      const result = await client.createNote(parseInt(id), {
+        text: options.text,
+        user: options.user,
+      });
+      outputJson({ message: 'Note added', ...result });
+    }));
+
+  return cmd;
+}
