@@ -1,25 +1,73 @@
 # Help Scout CLI
 
-A command-line interface for Help Scout, designed for LLMs and developers.
+[![npm version](https://img.shields.io/npm/v/@stephendolan/helpscout-cli.svg)](https://www.npmjs.com/package/@stephendolan/helpscout-cli)
+[![npm downloads](https://img.shields.io/npm/dm/@stephendolan/helpscout-cli.svg)](https://www.npmjs.com/package/@stephendolan/helpscout-cli)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/node/v/@stephendolan/helpscout-cli.svg)](https://nodejs.org)
+
+A command-line interface for Help Scout's Mailbox API 2.0, designed for LLMs and developers to quickly interface with Help Scout data.
+
+## Features
+
+- **LLM-First Design**: JSON output by default for easy parsing and integration with AI assistants
+- **Output Control**: Strip HTML from bodies, select specific fields, exclude API metadata
+- **Advanced Search**: Full query syntax support for filtering conversations
+- **Comprehensive Coverage**: Conversations, customers, tags, workflows, and mailboxes
+- **Type Safety**: Built with TypeScript for robust error handling
+- **Simple Authentication**: OAuth 2.0 credentials stored securely in OS keychain
 
 ## Installation
 
 ```bash
+# Install globally
 npm install -g @stephendolan/helpscout-cli
+
+# Or run directly without installing
+npx @stephendolan/helpscout-cli conversations list
+```
+
+### Linux Prerequisites
+
+Requires `libsecret` for keychain storage:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install libsecret-1-dev
+
+# Fedora/RHEL
+sudo dnf install libsecret-devel
+
+# Arch Linux
+sudo pacman -S libsecret
+```
+
+Without `libsecret`, use the environment variables instead.
+
+### From Source
+
+```bash
+git clone https://github.com/stephendolan/helpscout-cli.git
+cd helpscout-cli
+npm install
+npm run link  # Build and link globally
 ```
 
 ## Authentication
 
-Help Scout uses OAuth 2.0. Create an OAuth application at [Help Scout > Your Profile > My Apps](https://secure.helpscout.net/authentication/authorizeClientApplication).
+Help Scout uses OAuth 2.0 with Client Credentials. Create an OAuth application at [Help Scout > Your Profile > My Apps](https://secure.helpscout.net/authentication/authorizeClientApplication).
 
 ```bash
 helpscout auth login --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
+helpscout auth status   # Check authentication status
+helpscout auth logout   # Remove stored credentials
 ```
 
 Or use environment variables:
+
 ```bash
 export HELPSCOUT_APP_ID=your_app_id
 export HELPSCOUT_APP_SECRET=your_app_secret
+export HELPSCOUT_MAILBOX_ID=your_default_mailbox_id  # Optional
 ```
 
 ## Usage
@@ -31,6 +79,13 @@ export HELPSCOUT_APP_SECRET=your_app_secret
 helpscout conversations list
 helpscout conversations list --status active
 helpscout conversations list --mailbox 123 --tag urgent
+
+# Advanced search
+helpscout conversations list -q 'status:open tag:urgent'
+helpscout conversations list -q 'customer:john@example.com'
+
+# Aggregated summary
+helpscout conversations list --summary
 
 # View a conversation
 helpscout conversations view 456
@@ -118,9 +173,15 @@ helpscout mailboxes set-default 123
 - `--include-metadata` - Include `_links` and `_embedded` in responses (stripped by default)
 - `--help` - Show help for any command
 
-## Output
+## Output Format
 
-All commands output JSON for easy parsing:
+All commands return JSON by default:
+
+- **Lists**: Objects with data arrays and pagination info
+- **Single items**: Objects directly
+- **Errors**: `{"error": {"name": "...", "detail": "...", "statusCode": 400}}`
+
+### Working with JSON Output
 
 ```bash
 # Get all conversation subjects
@@ -131,26 +192,24 @@ helpscout conversations list --fields id,subject
 
 # Get plain text bodies (HTML stripped)
 helpscout conversations threads 456 --plain
+
+# Count conversations by status
+helpscout conversations list --summary | jq '.byStatus'
 ```
 
-### Conversation Summary
+## API Rate Limits
 
-Use `--summary` to get an aggregated view instead of raw conversation data:
+Help Scout enforces these rate limits:
 
-```bash
-helpscout conversations list --summary
-```
+- **200 requests per minute** per account
+- **12 write requests per 5 seconds** (POST, PUT, DELETE)
 
-### Advanced Search
+When exceeded, the API returns HTTP 429 errors. The CLI will report these as JSON errors.
 
-Use `-q, --query` for Help Scout's advanced search syntax:
+## References
 
-```bash
-helpscout conversations list -q 'status:open tag:urgent'
-helpscout conversations list -q 'customer:john@example.com'
-```
-
-See [Help Scout Search Filters](https://docs.helpscout.com/article/47-search-filters-with-operators) for full query syntax.
+- [Help Scout API Documentation](https://developer.helpscout.com/mailbox-api/)
+- [Help Scout Search Filters](https://docs.helpscout.com/article/47-search-filters-with-operators)
 
 ## License
 
