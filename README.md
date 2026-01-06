@@ -24,6 +24,7 @@ Create an OAuth app at [Help Scout > Your Profile > My Apps](https://secure.help
 helpscout auth login --app-id YOUR_APP_ID --app-secret YOUR_APP_SECRET
 helpscout auth status
 helpscout auth logout
+helpscout auth refresh                          # Refresh access token
 ```
 
 Or use environment variables: `HELPSCOUT_APP_ID`, `HELPSCOUT_APP_SECRET`, `HELPSCOUT_MAILBOX_ID`
@@ -40,6 +41,9 @@ helpscout conversations list --summary
 
 helpscout conversations view 456
 helpscout conversations threads 456
+helpscout conversations threads 456 --type customer  # Filter by type
+helpscout conversations threads 456 --html          # HTML output
+helpscout conversations threads 456 --include-notes
 helpscout conversations reply 456 --text "Thanks for reaching out!"
 helpscout conversations note 456 --text "Internal note"
 helpscout conversations add-tag 456 urgent
@@ -73,6 +77,16 @@ helpscout workflows deactivate 123
 helpscout mailboxes list
 helpscout mailboxes view 123
 helpscout mailboxes set-default 123
+helpscout mailboxes get-default
+helpscout mailboxes clear-default
+```
+
+### MCP Server
+
+Run as an MCP server for AI agent integration:
+
+```bash
+helpscout mcp
 ```
 
 ## Options
@@ -84,20 +98,14 @@ helpscout mailboxes set-default 123
 | `-f, --fields <fields>` | Include only specified fields |
 | `--include-metadata` | Include `_links` and `_embedded` |
 
-## Output
+## Examples
 
 ```bash
-# Filter with jq
 helpscout conversations list | jq '.conversations[].subject'
-
-# Select fields
 helpscout conversations list --fields id,subject
-
-# Plain text bodies
-helpscout conversations threads 456 --plain
 ```
 
-Errors return: `{"error": {"name": "...", "detail": "...", "statusCode": 400}}`
+Errors: `{"error": {"name": "...", "detail": "...", "statusCode": 400}}`
 
 ## References
 
