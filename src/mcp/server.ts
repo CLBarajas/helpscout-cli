@@ -18,6 +18,7 @@ const toolRegistry = [
   { name: 'list_tags', description: 'List all tags in the Help Scout account' },
   { name: 'list_workflows', description: 'List workflows with optional filtering' },
   { name: 'create_note', description: 'Add a private note to a conversation' },
+  { name: 'create_reply', description: 'Send a reply to a conversation (visible to customer)' },
   { name: 'add_tag', description: 'Add a tag to a conversation' },
   { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
 ];
@@ -186,6 +187,22 @@ server.tool(
   },
   async ({ conversationId, text }) => {
     await client.createNote(conversationId, { text });
+    return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'create_reply',
+  'Send a reply to a conversation (visible to customer)',
+  {
+    conversationId: z.number().describe('Conversation ID'),
+    text: z.string().describe('Reply text content'),
+    user: z.number().optional().describe('User ID sending the reply'),
+    draft: z.boolean().optional().describe('Save as draft instead of sending'),
+    status: z.enum(['active', 'closed', 'pending']).optional().describe('Set conversation status after reply'),
+  },
+  async ({ conversationId, text, user, draft, status }) => {
+    await client.createReply(conversationId, { text, user, draft, status });
     return jsonResponse({ success: true });
   }
 );
