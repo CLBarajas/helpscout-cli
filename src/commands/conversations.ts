@@ -338,5 +338,31 @@ export function createConversationsCommand(): Command {
       )
     );
 
+  cmd
+    .command('fields')
+    .description('Get custom fields for a conversation')
+    .argument('<id>', 'Conversation ID')
+    .action(
+      withErrorHandling(async (id: string) => {
+        const fields = await client.getConversationFields(parseIdArg(id, 'conversation'));
+        outputJson(fields);
+      })
+    );
+
+  cmd
+    .command('set-field')
+    .description('Set a custom field value on a conversation')
+    .argument('<id>', 'Conversation ID')
+    .requiredOption('--field-id <fieldId>', 'Custom field ID')
+    .requiredOption('--value <value>', 'Field value')
+    .action(
+      withErrorHandling(async (id: string, options: { fieldId: string; value: string }) => {
+        await client.updateConversationFields(parseIdArg(id, 'conversation'), [
+          { id: parseInt(options.fieldId, 10), value: options.value },
+        ]);
+        outputJson({ message: 'Field updated' });
+      })
+    );
+
   return cmd;
 }

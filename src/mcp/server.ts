@@ -13,12 +13,15 @@ const toolRegistry = [
   { name: 'get_conversations_summary', description: 'Get aggregated summary of conversations by status and tag (for weekly briefings)' },
   { name: 'list_mailboxes', description: 'List all mailboxes in the Help Scout account' },
   { name: 'get_mailbox', description: 'Get detailed information about a specific mailbox' },
+  { name: 'list_mailbox_fields', description: 'List custom fields for a mailbox' },
   { name: 'list_customers', description: 'List customers with optional filtering' },
   { name: 'get_customer', description: 'Get detailed information about a specific customer' },
   { name: 'list_tags', description: 'List all tags in the Help Scout account' },
   { name: 'list_workflows', description: 'List workflows with optional filtering' },
   { name: 'create_note', description: 'Add a private note to a conversation' },
   { name: 'add_tag', description: 'Add a tag to a conversation' },
+  { name: 'get_conversation_fields', description: 'Get custom field values for a conversation' },
+  { name: 'update_conversation_fields', description: 'Update custom field values on a conversation' },
   { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
 ];
 
@@ -140,6 +143,13 @@ server.tool(
 );
 
 server.tool(
+  'list_mailbox_fields',
+  'List custom fields for a mailbox',
+  { mailboxId: z.number().describe('Mailbox ID') },
+  async ({ mailboxId }) => jsonResponse(await client.listMailboxFields(mailboxId))
+);
+
+server.tool(
   'list_customers',
   'List customers with optional filtering',
   {
@@ -199,6 +209,33 @@ server.tool(
   },
   async ({ conversationId, tag }) => {
     await client.addConversationTag(conversationId, tag);
+    return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'get_conversation_fields',
+  'Get custom field values for a conversation',
+  { conversationId: z.number().describe('Conversation ID') },
+  async ({ conversationId }) => jsonResponse(await client.getConversationFields(conversationId))
+);
+
+server.tool(
+  'update_conversation_fields',
+  'Update custom field values on a conversation',
+  {
+    conversationId: z.number().describe('Conversation ID'),
+    fields: z
+      .array(
+        z.object({
+          id: z.number().describe('Field ID'),
+          value: z.string().describe('Field value'),
+        })
+      )
+      .describe('Array of field updates'),
+  },
+  async ({ conversationId, fields }) => {
+    await client.updateConversationFields(conversationId, fields);
     return jsonResponse({ success: true });
   }
 );

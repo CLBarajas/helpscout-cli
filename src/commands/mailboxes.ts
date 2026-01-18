@@ -63,5 +63,16 @@ export function createMailboxesCommand(): Command {
       })
     );
 
+  cmd
+    .command('fields')
+    .description('List custom fields for a mailbox')
+    .argument('<id>', 'Mailbox ID')
+    .action(
+      withErrorHandling(async (id: string) => {
+        const fields = await client.listMailboxFields(parseIdArg(id, 'mailbox'));
+        outputJson(fields);
+      })
+    );
+
   return cmd;
 }

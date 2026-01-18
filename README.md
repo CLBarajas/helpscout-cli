@@ -48,6 +48,8 @@ helpscout conversations reply 456 --text "Thanks for reaching out!"
 helpscout conversations note 456 --text "Internal note"
 helpscout conversations add-tag 456 urgent
 helpscout conversations remove-tag 456 urgent
+helpscout conversations fields 456               # Get custom field values
+helpscout conversations set-field 456 --field-id 789 --value "High Priority"
 helpscout conversations delete 456
 ```
 
@@ -76,6 +78,7 @@ helpscout workflows deactivate 123
 
 helpscout mailboxes list
 helpscout mailboxes view 123
+helpscout mailboxes fields 123                   # List custom fields for a mailbox
 helpscout mailboxes set-default 123
 helpscout mailboxes get-default
 helpscout mailboxes clear-default
