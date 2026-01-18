@@ -414,6 +414,51 @@ export class HelpScoutClient {
   async getMailbox(mailboxId: number) {
     return this.request<Mailbox>('GET', `/mailboxes/${mailboxId}`);
   }
+
+  // Users
+  async listUsers(params: { mailbox?: number; page?: number } = {}) {
+    const response = await this.request<
+      PaginatedResponse<{
+        users: Array<{
+          id: number;
+          firstName: string;
+          lastName: string;
+          email: string;
+          role: string;
+          timezone: string;
+          photoUrl?: string;
+        }>;
+      }>
+    >('GET', '/users', { params: { mailbox: params.mailbox, page: params.page } });
+    return {
+      users: response._embedded?.users || [],
+      page: response.page,
+    };
+  }
+
+  async getUser(userId: number) {
+    return this.request<{
+      id: number;
+      firstName: string;
+      lastName: string;
+      email: string;
+      role: string;
+      timezone: string;
+      photoUrl?: string;
+    }>('GET', `/users/${userId}`);
+  }
+
+  async getCurrentUser() {
+    return this.request<{
+      id: number;
+      firstName: string;
+      lastName: string;
+      email: string;
+      role: string;
+      timezone: string;
+      photoUrl?: string;
+    }>('GET', '/users/me');
+  }
 }
 
 export const client = new HelpScoutClient();
