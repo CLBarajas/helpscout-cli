@@ -17,6 +17,8 @@ const toolRegistry = [
   { name: 'get_customer', description: 'Get detailed information about a specific customer' },
   { name: 'list_tags', description: 'List all tags in the Help Scout account' },
   { name: 'list_workflows', description: 'List workflows with optional filtering' },
+  { name: 'list_saved_replies', description: 'List saved replies for a mailbox' },
+  { name: 'get_saved_reply', description: 'Get a saved reply with full text' },
   { name: 'create_note', description: 'Add a private note to a conversation' },
   { name: 'add_tag', description: 'Add a tag to a conversation' },
   { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
@@ -175,6 +177,23 @@ server.tool(
     page: z.number().optional().describe('Page number'),
   },
   async ({ mailbox, type, page }) => jsonResponse(await client.listWorkflows({ mailbox, type, page }))
+);
+
+server.tool(
+  'list_saved_replies',
+  'List saved replies for a mailbox',
+  {
+    mailboxId: z.number().describe('Mailbox ID'),
+    page: z.number().optional().describe('Page number'),
+  },
+  async ({ mailboxId, page }) => jsonResponse(await client.listSavedReplies(mailboxId, page))
+);
+
+server.tool(
+  'get_saved_reply',
+  'Get a saved reply with full text',
+  { savedReplyId: z.number().describe('Saved Reply ID') },
+  async ({ savedReplyId }) => jsonResponse(await client.getSavedReply(savedReplyId))
 );
 
 server.tool(

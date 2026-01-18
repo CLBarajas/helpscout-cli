@@ -81,6 +81,13 @@ helpscout mailboxes get-default
 helpscout mailboxes clear-default
 ```
 
+### Saved Replies
+
+```bash
+helpscout saved-replies list 123           # List saved replies for mailbox 123
+helpscout saved-replies view 456           # View saved reply with full text
+```
+
 ### MCP Server
 
 Run as an MCP server for AI agent integration:
