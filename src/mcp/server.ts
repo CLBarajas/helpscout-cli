@@ -20,6 +20,9 @@ const toolRegistry = [
   { name: 'create_note', description: 'Add a private note to a conversation' },
   { name: 'add_tag', description: 'Add a tag to a conversation' },
   { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
+  { name: 'list_teams', description: 'List all teams' },
+  { name: 'get_team', description: 'Get team details' },
+  { name: 'list_team_members', description: 'List members of a team' },
 ];
 
 interface ConversationSummary {
@@ -205,6 +208,30 @@ server.tool(
 
 server.tool('check_auth', 'Check if Help Scout authentication is configured', {}, async () =>
   jsonResponse({ authenticated: await auth.isAuthenticated() })
+);
+
+server.tool(
+  'list_teams',
+  'List all teams',
+  { page: z.number().optional().describe('Page number') },
+  async ({ page }) => jsonResponse(await client.listTeams(page))
+);
+
+server.tool(
+  'get_team',
+  'Get team details',
+  { teamId: z.number().describe('Team ID') },
+  async ({ teamId }) => jsonResponse(await client.getTeam(teamId))
+);
+
+server.tool(
+  'list_team_members',
+  'List members of a team',
+  {
+    teamId: z.number().describe('Team ID'),
+    page: z.number().optional().describe('Page number'),
+  },
+  async ({ teamId, page }) => jsonResponse(await client.listTeamMembers(teamId, page))
 );
 
 server.tool(

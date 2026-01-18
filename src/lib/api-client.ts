@@ -414,6 +414,38 @@ export class HelpScoutClient {
   async getMailbox(mailboxId: number) {
     return this.request<Mailbox>('GET', `/mailboxes/${mailboxId}`);
   }
+
+  // Teams
+  async listTeams(page?: number) {
+    const response = await this.request<
+      PaginatedResponse<{
+        teams: Array<{ id: number; name: string; createdAt: string; updatedAt: string }>;
+      }>
+    >('GET', '/teams', { params: page ? { page } : undefined });
+    return {
+      teams: response._embedded?.teams || [],
+      page: response.page,
+    };
+  }
+
+  async getTeam(teamId: number) {
+    return this.request<{ id: number; name: string; createdAt: string; updatedAt: string }>(
+      'GET',
+      `/teams/${teamId}`
+    );
+  }
+
+  async listTeamMembers(teamId: number, page?: number) {
+    const response = await this.request<
+      PaginatedResponse<{
+        users: Array<{ id: number; firstName: string; lastName: string; email: string }>;
+      }>
+    >('GET', `/teams/${teamId}/members`, { params: page ? { page } : undefined });
+    return {
+      users: response._embedded?.users || [],
+      page: response.page,
+    };
+  }
 }
 
 export const client = new HelpScoutClient();

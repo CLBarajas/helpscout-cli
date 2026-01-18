@@ -81,6 +81,14 @@ helpscout mailboxes get-default
 helpscout mailboxes clear-default
 ```
 
+### Teams
+
+```bash
+helpscout teams list
+helpscout teams view 123
+helpscout teams members 123
+```
+
 ### MCP Server
 
 Run as an MCP server for AI agent integration:
