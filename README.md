@@ -49,6 +49,12 @@ helpscout conversations note 456 --text "Internal note"
 helpscout conversations add-tag 456 urgent
 helpscout conversations remove-tag 456 urgent
 helpscout conversations delete 456
+
+helpscout conversations update 456 --status closed
+helpscout conversations update 456 --customer 789
+helpscout conversations update 456 --assignee 123
+helpscout conversations update 456 --assignee none
+helpscout conversations update 456 --status pending --assignee 123
 ```
 
 ### Customers

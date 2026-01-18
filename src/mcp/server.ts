@@ -11,6 +11,7 @@ const toolRegistry = [
   { name: 'get_conversation', description: 'Get detailed information about a specific conversation including threads' },
   { name: 'search_conversations', description: 'Search all conversations matching a query (fetches all pages)' },
   { name: 'get_conversations_summary', description: 'Get aggregated summary of conversations by status and tag (for weekly briefings)' },
+  { name: 'update_conversation', description: 'Update conversation properties without adding a thread' },
   { name: 'list_mailboxes', description: 'List all mailboxes in the Help Scout account' },
   { name: 'get_mailbox', description: 'Get detailed information about a specific mailbox' },
   { name: 'list_customers', description: 'List customers with optional filtering' },
@@ -199,6 +200,53 @@ server.tool(
   },
   async ({ conversationId, tag }) => {
     await client.addConversationTag(conversationId, tag);
+    return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'update_conversation',
+  'Update conversation properties without adding a thread',
+  {
+    conversationId: z.number().describe('Conversation ID'),
+    status: z
+      .enum(['active', 'closed', 'pending', 'spam'])
+      .optional()
+      .describe('Change conversation status'),
+    assignee: z
+      .union([z.number(), z.literal('none')])
+      .optional()
+      .describe('User ID to assign to, or "none" to unassign'),
+    customer: z.number().optional().describe('Change primary customer ID'),
+    subject: z.string().optional().describe('Update subject line'),
+    mailbox: z.number().optional().describe('Move to different mailbox'),
+  },
+  async ({ conversationId, status, assignee, customer, subject, mailbox }) => {
+    const operations: Array<{ op: string; path: string; value?: unknown }> = [];
+
+    if (status) {
+      operations.push({ op: 'replace', path: '/status', value: status });
+    }
+    if (assignee === 'none') {
+      operations.push({ op: 'remove', path: '/assignTo' });
+    } else if (assignee) {
+      operations.push({ op: 'replace', path: '/assignTo', value: assignee });
+    }
+    if (customer) {
+      operations.push({ op: 'replace', path: '/primaryCustomer.id', value: customer });
+    }
+    if (subject) {
+      operations.push({ op: 'replace', path: '/subject', value: subject });
+    }
+    if (mailbox) {
+      operations.push({ op: 'replace', path: '/mailbox', value: mailbox });
+    }
+
+    if (operations.length === 0) {
+      return jsonResponse({ error: 'At least one update option is required' });
+    }
+
+    await client.updateConversation(conversationId, operations);
     return jsonResponse({ success: true });
   }
 );
