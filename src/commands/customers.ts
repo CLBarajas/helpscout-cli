@@ -155,5 +155,161 @@ export function createCustomersCommand(): Command {
       })
     );
 
+  // Customer Emails
+  cmd
+    .command('emails')
+    .description('List customer emails')
+    .argument('<customerId>', 'Customer ID')
+    .action(
+      withErrorHandling(async (customerId: string) => {
+        const emails = await client.listCustomerEmails(parseIdArg(customerId, 'customer'));
+        outputJson(emails);
+      })
+    );
+
+  cmd
+    .command('add-email')
+    .description('Add email to customer')
+    .argument('<customerId>', 'Customer ID')
+    .requiredOption('--type <type>', 'Email type (home, work, other)')
+    .requiredOption('--value <email>', 'Email address')
+    .action(
+      withErrorHandling(
+        async (customerId: string, options: { type: string; value: string }) => {
+          await client.createCustomerEmail(parseIdArg(customerId, 'customer'), {
+            type: options.type,
+            value: options.value,
+          });
+          outputJson({ message: 'Email added' });
+        }
+      )
+    );
+
+  cmd
+    .command('update-email')
+    .description('Update customer email')
+    .argument('<customerId>', 'Customer ID')
+    .argument('<emailId>', 'Email ID')
+    .option('--type <type>', 'Email type (home, work, other)')
+    .option('--value <email>', 'Email address')
+    .action(
+      withErrorHandling(
+        async (
+          customerId: string,
+          emailId: string,
+          options: { type?: string; value?: string }
+        ) => {
+          const data = {
+            ...(options.type && { type: options.type }),
+            ...(options.value && { value: options.value }),
+          };
+          requireAtLeastOneField(data, 'Email update');
+          await client.updateCustomerEmail(
+            parseIdArg(customerId, 'customer'),
+            parseIdArg(emailId, 'email'),
+            data
+          );
+          outputJson({ message: 'Email updated' });
+        }
+      )
+    );
+
+  cmd
+    .command('delete-email')
+    .description('Delete customer email')
+    .argument('<customerId>', 'Customer ID')
+    .argument('<emailId>', 'Email ID')
+    .option('-y, --yes', 'Skip confirmation')
+    .action(
+      withErrorHandling(
+        async (customerId: string, emailId: string, options: { yes?: boolean }) => {
+          requireConfirmation('email', options.yes);
+          await client.deleteCustomerEmail(
+            parseIdArg(customerId, 'customer'),
+            parseIdArg(emailId, 'email')
+          );
+          outputJson({ message: 'Email deleted' });
+        }
+      )
+    );
+
+  // Customer Phones
+  cmd
+    .command('phones')
+    .description('List customer phones')
+    .argument('<customerId>', 'Customer ID')
+    .action(
+      withErrorHandling(async (customerId: string) => {
+        const phones = await client.listCustomerPhones(parseIdArg(customerId, 'customer'));
+        outputJson(phones);
+      })
+    );
+
+  cmd
+    .command('add-phone')
+    .description('Add phone to customer')
+    .argument('<customerId>', 'Customer ID')
+    .requiredOption('--type <type>', 'Phone type (home, work, mobile, fax, pager, other)')
+    .requiredOption('--value <phone>', 'Phone number')
+    .action(
+      withErrorHandling(
+        async (customerId: string, options: { type: string; value: string }) => {
+          await client.createCustomerPhone(parseIdArg(customerId, 'customer'), {
+            type: options.type,
+            value: options.value,
+          });
+          outputJson({ message: 'Phone added' });
+        }
+      )
+    );
+
+  cmd
+    .command('update-phone')
+    .description('Update customer phone')
+    .argument('<customerId>', 'Customer ID')
+    .argument('<phoneId>', 'Phone ID')
+    .option('--type <type>', 'Phone type (home, work, mobile, fax, pager, other)')
+    .option('--value <phone>', 'Phone number')
+    .action(
+      withErrorHandling(
+        async (
+          customerId: string,
+          phoneId: string,
+          options: { type?: string; value?: string }
+        ) => {
+          const data = {
+            ...(options.type && { type: options.type }),
+            ...(options.value && { value: options.value }),
+          };
+          requireAtLeastOneField(data, 'Phone update');
+          await client.updateCustomerPhone(
+            parseIdArg(customerId, 'customer'),
+            parseIdArg(phoneId, 'phone'),
+            data
+          );
+          outputJson({ message: 'Phone updated' });
+        }
+      )
+    );
+
+  cmd
+    .command('delete-phone')
+    .description('Delete customer phone')
+    .argument('<customerId>', 'Customer ID')
+    .argument('<phoneId>', 'Phone ID')
+    .option('-y, --yes', 'Skip confirmation')
+    .action(
+      withErrorHandling(
+        async (customerId: string, phoneId: string, options: { yes?: boolean }) => {
+          requireConfirmation('phone', options.yes);
+          await client.deleteCustomerPhone(
+            parseIdArg(customerId, 'customer'),
+            parseIdArg(phoneId, 'phone')
+          );
+          outputJson({ message: 'Phone deleted' });
+        }
+      )
+    );
+
   return cmd;
 }

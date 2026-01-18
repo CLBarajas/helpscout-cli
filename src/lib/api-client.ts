@@ -352,6 +352,54 @@ export class HelpScoutClient {
     await this.request<void>('DELETE', `/customers/${customerId}`);
   }
 
+  // Customer Emails
+  async listCustomerEmails(customerId: number) {
+    const response = await this.request<{
+      _embedded?: { emails: Array<{ id: number; type: string; value: string }> };
+    }>('GET', `/customers/${customerId}/emails`);
+    return response._embedded?.emails || [];
+  }
+
+  async createCustomerEmail(customerId: number, data: { type: string; value: string }) {
+    await this.request<void>('POST', `/customers/${customerId}/emails`, { body: data });
+  }
+
+  async updateCustomerEmail(
+    customerId: number,
+    emailId: number,
+    data: { type?: string; value?: string }
+  ) {
+    await this.request<void>('PUT', `/customers/${customerId}/emails/${emailId}`, { body: data });
+  }
+
+  async deleteCustomerEmail(customerId: number, emailId: number) {
+    await this.request<void>('DELETE', `/customers/${customerId}/emails/${emailId}`);
+  }
+
+  // Customer Phones
+  async listCustomerPhones(customerId: number) {
+    const response = await this.request<{
+      _embedded?: { phones: Array<{ id: number; type: string; value: string }> };
+    }>('GET', `/customers/${customerId}/phones`);
+    return response._embedded?.phones || [];
+  }
+
+  async createCustomerPhone(customerId: number, data: { type: string; value: string }) {
+    await this.request<void>('POST', `/customers/${customerId}/phones`, { body: data });
+  }
+
+  async updateCustomerPhone(
+    customerId: number,
+    phoneId: number,
+    data: { type?: string; value?: string }
+  ) {
+    await this.request<void>('PUT', `/customers/${customerId}/phones/${phoneId}`, { body: data });
+  }
+
+  async deleteCustomerPhone(customerId: number, phoneId: number) {
+    await this.request<void>('DELETE', `/customers/${customerId}/phones/${phoneId}`);
+  }
+
   // Tags
   async listTags(page?: number) {
     const response = await this.request<PaginatedResponse<{ tags: Tag[] }>>('GET', '/tags', {
