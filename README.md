@@ -70,6 +70,15 @@ helpscout customers update 789 --organization "Acme Corp"
 helpscout customers delete 789
 ```
 
+### Users
+
+```bash
+helpscout users list
+helpscout users list --mailbox 123
+helpscout users view 456
+helpscout users me
+```
+
 ### Tags, Workflows, Mailboxes
 
 ```bash

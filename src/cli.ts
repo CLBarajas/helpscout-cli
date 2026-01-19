@@ -8,6 +8,7 @@ import { createConversationsCommand } from './commands/conversations.js';
 import { createCustomersCommand } from './commands/customers.js';
 import { createTagsCommand } from './commands/tags.js';
 import { createWorkflowsCommand } from './commands/workflows.js';
+import { createUsersCommand } from './commands/users.js';
 import { createMcpCommand } from './commands/mcp.js';
 
 declare const __VERSION__: string;
@@ -38,6 +39,7 @@ program.addCommand(createConversationsCommand());
 program.addCommand(createCustomersCommand());
 program.addCommand(createTagsCommand());
 program.addCommand(createWorkflowsCommand());
+program.addCommand(createUsersCommand());
 program.addCommand(createMcpCommand());
 
 program.parseAsync().catch(() => {

@@ -21,6 +21,9 @@ const toolRegistry = [
   { name: 'create_note', description: 'Add a private note to a conversation' },
   { name: 'add_tag', description: 'Add a tag to a conversation' },
   { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
+  { name: 'list_users', description: 'List users with optional mailbox filter' },
+  { name: 'get_user', description: 'Get detailed information about a specific user' },
+  { name: 'get_current_user', description: 'Get the currently authenticated user' },
 ];
 
 interface ConversationSummary {
@@ -257,6 +260,27 @@ server.tool(
 
 server.tool('check_auth', 'Check if Help Scout authentication is configured', {}, async () =>
   jsonResponse({ authenticated: await auth.isAuthenticated() })
+);
+
+server.tool(
+  'list_users',
+  'List users with optional mailbox filter',
+  {
+    mailbox: z.number().optional().describe('Mailbox ID to filter by'),
+    page: z.number().optional().describe('Page number'),
+  },
+  async ({ mailbox, page }) => jsonResponse(await client.listUsers({ mailbox, page }))
+);
+
+server.tool(
+  'get_user',
+  'Get detailed information about a specific user',
+  { userId: z.number().describe('User ID') },
+  async ({ userId }) => jsonResponse(await client.getUser(userId))
+);
+
+server.tool('get_current_user', 'Get the currently authenticated user', {}, async () =>
+  jsonResponse(await client.getCurrentUser())
 );
 
 server.tool(
