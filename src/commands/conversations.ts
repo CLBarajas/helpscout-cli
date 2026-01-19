@@ -341,5 +341,68 @@ export function createConversationsCommand(): Command {
       )
     );
 
+  cmd
+    .command('update')
+    .description('Update conversation properties without adding a thread')
+    .argument('<id>', 'Conversation ID')
+    .option('--status <status>', 'Change status (active, closed, pending, spam)')
+    .option('--assignee <userId>', 'Assign to user ID (or "none" to unassign)')
+    .option('--customer <customerId>', 'Change primary customer')
+    .option('--subject <text>', 'Update subject line')
+    .option('--mailbox <mailboxId>', 'Move to different mailbox')
+    .action(
+      withErrorHandling(
+        async (
+          id: string,
+          options: {
+            status?: string;
+            assignee?: string;
+            customer?: string;
+            subject?: string;
+            mailbox?: string;
+          }
+        ) => {
+          const operations: Array<{ op: string; path: string; value?: unknown }> = [];
+
+          if (options.status) {
+            operations.push({ op: 'replace', path: '/status', value: options.status });
+          }
+          if (options.assignee === 'none') {
+            operations.push({ op: 'remove', path: '/assignTo' });
+          } else if (options.assignee) {
+            operations.push({
+              op: 'replace',
+              path: '/assignTo',
+              value: parseInt(options.assignee, 10),
+            });
+          }
+          if (options.customer) {
+            operations.push({
+              op: 'replace',
+              path: '/primaryCustomer.id',
+              value: parseInt(options.customer, 10),
+            });
+          }
+          if (options.subject) {
+            operations.push({ op: 'replace', path: '/subject', value: options.subject });
+          }
+          if (options.mailbox) {
+            operations.push({
+              op: 'replace',
+              path: '/mailbox',
+              value: parseInt(options.mailbox, 10),
+            });
+          }
+
+          if (operations.length === 0) {
+            throw new Error('At least one update option is required');
+          }
+
+          await client.updateConversation(parseIdArg(id, 'conversation'), operations);
+          outputJson({ message: 'Conversation updated' });
+        }
+      )
+    );
+
   return cmd;
 }

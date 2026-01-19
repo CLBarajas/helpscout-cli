@@ -248,13 +248,9 @@ export class HelpScoutClient {
 
   async updateConversation(
     conversationId: number,
-    data: Partial<{
-      op: string;
-      path: string;
-      value: unknown;
-    }>
+    operations: Array<{ op: string; path: string; value?: unknown }>
   ) {
-    await this.request<void>('PATCH', `/conversations/${conversationId}`, { body: data });
+    await this.request<void>('PATCH', `/conversations/${conversationId}`, { body: operations });
   }
 
   async deleteConversation(conversationId: number) {
