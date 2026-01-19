@@ -276,12 +276,18 @@ export class HelpScoutClient {
     conversationId: number,
     data: {
       text: string;
+      customer: number;
       user?: number;
       draft?: boolean;
       status?: string;
     }
   ) {
-    await this.request<void>('POST', `/conversations/${conversationId}/reply`, { body: data });
+    // Help Scout API requires customer object format
+    const body = {
+      ...data,
+      customer: { id: data.customer },
+    };
+    await this.request<void>('POST', `/conversations/${conversationId}/reply`, { body });
   }
 
   async createNote(

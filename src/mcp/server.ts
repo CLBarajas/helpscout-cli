@@ -358,7 +358,13 @@ server.tool(
     status: z.enum(['active', 'closed', 'pending']).optional().describe('Set conversation status after reply'),
   },
   async ({ conversationId, text, user, draft, status }) => {
-    await client.createReply(conversationId, { text, user, draft, status });
+    // Fetch conversation to get primary customer ID (required by Help Scout API)
+    const conversation = await client.getConversation(conversationId);
+    const customerId = conversation.primaryCustomer?.id;
+    if (!customerId) {
+      throw new Error('Could not determine customer ID from conversation');
+    }
+    await client.createReply(conversationId, { text, customer: customerId, user, draft, status });
     return jsonResponse({ success: true });
   }
 );

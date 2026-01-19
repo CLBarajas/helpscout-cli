@@ -303,8 +303,16 @@ export function createConversationsCommand(): Command {
             status?: string;
           }
         ) => {
-          await client.createReply(parseIdArg(id, 'conversation'), {
+          const conversationId = parseIdArg(id, 'conversation');
+          // Fetch conversation to get primary customer ID (required by Help Scout API)
+          const conversation = await client.getConversation(conversationId);
+          const customerId = conversation.primaryCustomer?.id;
+          if (!customerId) {
+            throw new Error('Could not determine customer ID from conversation');
+          }
+          await client.createReply(conversationId, {
             text: options.text,
+            customer: customerId,
             user: options.user ? parseIdArg(options.user, 'user') : undefined,
             draft: options.draft,
             status: options.status,
