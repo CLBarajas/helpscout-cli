@@ -536,6 +536,39 @@ export class HelpScoutClient {
       page: response.page,
     };
   }
+
+  // Custom Fields
+  async listMailboxFields(mailboxId: number) {
+    const response = await this.request<{
+      _embedded?: {
+        fields: Array<{
+          id: number;
+          name: string;
+          type: string;
+          required: boolean;
+          order: number;
+          options?: Array<{ id: number; label: string; order: number }>;
+        }>;
+      };
+    }>('GET', `/mailboxes/${mailboxId}/fields`);
+    return response._embedded?.fields || [];
+  }
+
+  async getConversationFields(conversationId: number) {
+    const response = await this.request<{
+      _embedded?: { fields: Array<{ id: number; name: string; value: string }> };
+    }>('GET', `/conversations/${conversationId}/fields`);
+    return response._embedded?.fields || [];
+  }
+
+  async updateConversationFields(
+    conversationId: number,
+    fields: Array<{ id: number; value: string }>
+  ) {
+    await this.request<void>('PUT', `/conversations/${conversationId}/fields`, {
+      body: { fields },
+    });
+  }
 }
 
 export const client = new HelpScoutClient();
