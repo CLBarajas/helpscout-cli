@@ -30,9 +30,12 @@ const toolRegistry = [
   { name: 'create_reply', description: 'Send a reply to a conversation (visible to customer)' },
   { name: 'add_tag', description: 'Add a tag to a conversation' },
   { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
-  { name: 'list_users', description: 'List users with optional mailbox filter' },
+{ name: 'list_users', description: 'List users with optional mailbox filter' },
   { name: 'get_user', description: 'Get detailed information about a specific user' },
   { name: 'get_current_user', description: 'Get the currently authenticated user' },
+  { name: 'list_teams', description: 'List all teams' },
+  { name: 'get_team', description: 'Get team details' },
+  { name: 'list_team_members', description: 'List members of a team' },
 ];
 
 interface ConversationSummary {
@@ -414,6 +417,30 @@ server.tool(
 
 server.tool('get_current_user', 'Get the currently authenticated user', {}, async () =>
   jsonResponse(await client.getCurrentUser())
+);
+
+server.tool(
+  'list_teams',
+  'List all teams',
+  { page: z.number().optional().describe('Page number') },
+  async ({ page }) => jsonResponse(await client.listTeams(page))
+);
+
+server.tool(
+  'get_team',
+  'Get team details',
+  { teamId: z.number().describe('Team ID') },
+  async ({ teamId }) => jsonResponse(await client.getTeam(teamId))
+);
+
+server.tool(
+  'list_team_members',
+  'List members of a team',
+  {
+    teamId: z.number().describe('Team ID'),
+    page: z.number().optional().describe('Page number'),
+  },
+  async ({ teamId, page }) => jsonResponse(await client.listTeamMembers(teamId, page))
 );
 
 server.tool(
