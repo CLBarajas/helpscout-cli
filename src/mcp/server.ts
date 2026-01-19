@@ -16,6 +16,14 @@ const toolRegistry = [
   { name: 'get_mailbox', description: 'Get detailed information about a specific mailbox' },
   { name: 'list_customers', description: 'List customers with optional filtering' },
   { name: 'get_customer', description: 'Get detailed information about a specific customer' },
+  { name: 'list_customer_emails', description: 'List emails for a customer' },
+  { name: 'create_customer_email', description: 'Add an email to a customer' },
+  { name: 'update_customer_email', description: 'Update a customer email' },
+  { name: 'delete_customer_email', description: 'Delete a customer email' },
+  { name: 'list_customer_phones', description: 'List phones for a customer' },
+  { name: 'create_customer_phone', description: 'Add a phone to a customer' },
+  { name: 'update_customer_phone', description: 'Update a customer phone' },
+  { name: 'delete_customer_phone', description: 'Delete a customer phone' },
   { name: 'list_tags', description: 'List all tags in the Help Scout account' },
   { name: 'list_workflows', description: 'List workflows with optional filtering' },
   { name: 'create_note', description: 'Add a private note to a conversation' },
@@ -162,6 +170,114 @@ server.tool(
   'Get detailed information about a specific customer',
   { customerId: z.number().describe('Customer ID') },
   async ({ customerId }) => jsonResponse(await client.getCustomer(customerId))
+);
+
+// Customer Emails
+server.tool(
+  'list_customer_emails',
+  'List emails for a customer',
+  { customerId: z.number().describe('Customer ID') },
+  async ({ customerId }) => jsonResponse(await client.listCustomerEmails(customerId))
+);
+
+server.tool(
+  'create_customer_email',
+  'Add an email to a customer',
+  {
+    customerId: z.number().describe('Customer ID'),
+    type: z.enum(['home', 'work', 'other']).describe('Email type'),
+    value: z.string().describe('Email address'),
+  },
+  async ({ customerId, type, value }) => {
+    await client.createCustomerEmail(customerId, { type, value });
+    return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'update_customer_email',
+  'Update a customer email',
+  {
+    customerId: z.number().describe('Customer ID'),
+    emailId: z.number().describe('Email ID'),
+    type: z.enum(['home', 'work', 'other']).optional().describe('Email type'),
+    value: z.string().optional().describe('Email address'),
+  },
+  async ({ customerId, emailId, type, value }) => {
+    const data = {
+      ...(type && { type }),
+      ...(value && { value }),
+    };
+    await client.updateCustomerEmail(customerId, emailId, data);
+    return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'delete_customer_email',
+  'Delete a customer email',
+  {
+    customerId: z.number().describe('Customer ID'),
+    emailId: z.number().describe('Email ID'),
+  },
+  async ({ customerId, emailId }) => {
+    await client.deleteCustomerEmail(customerId, emailId);
+    return jsonResponse({ success: true });
+  }
+);
+
+// Customer Phones
+server.tool(
+  'list_customer_phones',
+  'List phones for a customer',
+  { customerId: z.number().describe('Customer ID') },
+  async ({ customerId }) => jsonResponse(await client.listCustomerPhones(customerId))
+);
+
+server.tool(
+  'create_customer_phone',
+  'Add a phone to a customer',
+  {
+    customerId: z.number().describe('Customer ID'),
+    type: z.enum(['home', 'work', 'mobile', 'fax', 'pager', 'other']).describe('Phone type'),
+    value: z.string().describe('Phone number'),
+  },
+  async ({ customerId, type, value }) => {
+    await client.createCustomerPhone(customerId, { type, value });
+    return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'update_customer_phone',
+  'Update a customer phone',
+  {
+    customerId: z.number().describe('Customer ID'),
+    phoneId: z.number().describe('Phone ID'),
+    type: z.enum(['home', 'work', 'mobile', 'fax', 'pager', 'other']).optional().describe('Phone type'),
+    value: z.string().optional().describe('Phone number'),
+  },
+  async ({ customerId, phoneId, type, value }) => {
+    const data = {
+      ...(type && { type }),
+      ...(value && { value }),
+    };
+    await client.updateCustomerPhone(customerId, phoneId, data);
+    return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'delete_customer_phone',
+  'Delete a customer phone',
+  {
+    customerId: z.number().describe('Customer ID'),
+    phoneId: z.number().describe('Phone ID'),
+  },
+  async ({ customerId, phoneId }) => {
+    await client.deleteCustomerPhone(customerId, phoneId);
+    return jsonResponse({ success: true });
+  }
 );
 
 server.tool(

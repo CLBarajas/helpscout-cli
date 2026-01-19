@@ -68,6 +68,18 @@ helpscout customers view 789
 helpscout customers create --first-name John --last-name Doe --email john@example.com
 helpscout customers update 789 --organization "Acme Corp"
 helpscout customers delete 789
+
+# Customer emails
+helpscout customers emails 789
+helpscout customers add-email 789 --type work --value new@example.com
+helpscout customers update-email 789 123 --type home
+helpscout customers delete-email 789 123
+
+# Customer phones
+helpscout customers phones 789
+helpscout customers add-phone 789 --type mobile --value "+1-555-0100"
+helpscout customers update-phone 789 456 --type work
+helpscout customers delete-phone 789 456
 ```
 
 ### Users
