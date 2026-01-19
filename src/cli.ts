@@ -10,6 +10,7 @@ import { createTagsCommand } from './commands/tags.js';
 import { createWorkflowsCommand } from './commands/workflows.js';
 import { createUsersCommand } from './commands/users.js';
 import { createTeamsCommand } from './commands/teams.js';
+import { createSavedRepliesCommand } from './commands/saved-replies.js';
 import { createMcpCommand } from './commands/mcp.js';
 
 declare const __VERSION__: string;
@@ -42,6 +43,7 @@ program.addCommand(createTagsCommand());
 program.addCommand(createWorkflowsCommand());
 program.addCommand(createUsersCommand());
 program.addCommand(createTeamsCommand());
+program.addCommand(createSavedRepliesCommand());
 program.addCommand(createMcpCommand());
 
 program.parseAsync().catch(() => {

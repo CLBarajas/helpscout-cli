@@ -569,6 +569,32 @@ export class HelpScoutClient {
       body: { fields },
     });
   }
+
+  // Saved Replies
+  async listSavedReplies(mailboxId: number, page?: number) {
+    const response = await this.request<
+      PaginatedResponse<{
+        savedReplies: Array<{ id: number; name: string; createdAt: string; modifiedAt: string }>;
+      }>
+    >('GET', `/mailboxes/${mailboxId}/saved-replies`, { params: page ? { page } : undefined });
+    return {
+      savedReplies: response._embedded?.savedReplies || [],
+      page: response.page,
+    };
+  }
+
+  async getSavedReply(savedReplyId: number) {
+    return this.request<{
+      id: number;
+      mailboxId: number;
+      name: string;
+      text: string;
+      createdAt: string;
+      modifiedAt: string;
+      createdBy: { id: number; firstName: string; lastName: string };
+      modifiedBy: { id: number; firstName: string; lastName: string };
+    }>('GET', `/saved-replies/${savedReplyId}`);
+  }
 }
 
 export const client = new HelpScoutClient();
