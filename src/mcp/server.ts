@@ -326,8 +326,12 @@ server.tool(
 server.tool(
   'get_saved_reply',
   'Get a saved reply with full text',
-  { savedReplyId: z.number().describe('Saved Reply ID') },
-  async ({ savedReplyId }) => jsonResponse(await client.getSavedReply(savedReplyId))
+  {
+    mailboxId: z.number().describe('Mailbox ID'),
+    savedReplyId: z.number().describe('Saved Reply ID'),
+  },
+  async ({ mailboxId, savedReplyId }) =>
+    jsonResponse(await client.getSavedReply(mailboxId, savedReplyId))
 );
 
 server.tool(

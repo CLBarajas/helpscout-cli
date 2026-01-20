@@ -577,29 +577,22 @@ export class HelpScoutClient {
   }
 
   // Saved Replies
+  // Note: This endpoint returns a flat array, not a paginated _embedded response
   async listSavedReplies(mailboxId: number, page?: number) {
     const response = await this.request<
-      PaginatedResponse<{
-        savedReplies: Array<{ id: number; name: string; createdAt: string; modifiedAt: string }>;
-      }>
+      Array<{ id: number; name: string; preview: string; chatPreview?: string }>
     >('GET', `/mailboxes/${mailboxId}/saved-replies`, { params: page ? { page } : undefined });
     return {
-      savedReplies: response._embedded?.savedReplies || [],
-      page: response.page,
+      savedReplies: Array.isArray(response) ? response : [],
     };
   }
 
-  async getSavedReply(savedReplyId: number) {
+  async getSavedReply(mailboxId: number, savedReplyId: number) {
     return this.request<{
       id: number;
-      mailboxId: number;
       name: string;
       text: string;
-      createdAt: string;
-      modifiedAt: string;
-      createdBy: { id: number; firstName: string; lastName: string };
-      modifiedBy: { id: number; firstName: string; lastName: string };
-    }>('GET', `/saved-replies/${savedReplyId}`);
+    }>('GET', `/mailboxes/${mailboxId}/saved-replies/${savedReplyId}`);
   }
 }
 

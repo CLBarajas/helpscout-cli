@@ -24,10 +24,14 @@ export function createSavedRepliesCommand(): Command {
   cmd
     .command('view')
     .description('View a saved reply (includes full text)')
+    .argument('<mailboxId>', 'Mailbox ID')
     .argument('<id>', 'Saved Reply ID')
     .action(
-      withErrorHandling(async (id: string) => {
-        const savedReply = await client.getSavedReply(parseIdArg(id, 'saved reply'));
+      withErrorHandling(async (mailboxId: string, id: string) => {
+        const savedReply = await client.getSavedReply(
+          parseIdArg(mailboxId, 'mailbox'),
+          parseIdArg(id, 'saved reply')
+        );
         outputJson(savedReply);
       })
     );
