@@ -250,7 +250,11 @@ export class HelpScoutClient {
     conversationId: number,
     operations: Array<{ op: string; path: string; value?: unknown }>
   ) {
-    await this.request<void>('PATCH', `/conversations/${conversationId}`, { body: operations });
+    // Help Scout expects one operation at a time as a single object, not an array
+    // Execute each operation sequentially
+    for (const operation of operations) {
+      await this.request<void>('PATCH', `/conversations/${conversationId}`, { body: operation });
+    }
   }
 
   async deleteConversation(conversationId: number) {
