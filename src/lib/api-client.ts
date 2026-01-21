@@ -565,10 +565,9 @@ export class HelpScoutClient {
   }
 
   async getConversationFields(conversationId: number) {
-    const response = await this.request<{
-      _embedded?: { fields: Array<{ id: number; name: string; value: string }> };
-    }>('GET', `/conversations/${conversationId}/fields`);
-    return response._embedded?.fields || [];
+    // Custom fields are embedded in the conversation response, not a separate endpoint
+    const conversation = await this.getConversation(conversationId);
+    return conversation.customFields || [];
   }
 
   async updateConversationFields(
