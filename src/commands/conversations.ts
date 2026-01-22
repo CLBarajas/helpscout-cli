@@ -1,4 +1,7 @@
 import { Command } from 'commander';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { basename, resolve } from 'node:path';
+import { lookup } from 'mime-types';
 import { client } from '../lib/api-client.js';
 import { outputJson, htmlToPlainText, buildName } from '../lib/output.js';
 import { withErrorHandling, requireConfirmation, parseIdArg } from '../lib/command-utils.js';
@@ -436,6 +439,115 @@ export function createConversationsCommand(): Command {
         ]);
         outputJson({ message: 'Field updated' });
       })
+    );
+
+  // Attachment commands
+  cmd
+    .command('attachments')
+    .description('List all attachments in a conversation (across all threads)')
+    .argument('<id>', 'Conversation ID')
+    .action(
+      withErrorHandling(async (id: string) => {
+        const result = await client.listConversationAttachments(parseIdArg(id, 'conversation'));
+        outputJson(result);
+      })
+    );
+
+  cmd
+    .command('attachment-download')
+    .description('Download an attachment')
+    .argument('<conversationId>', 'Conversation ID')
+    .argument('<attachmentId>', 'Attachment ID')
+    .option('-o, --output <path>', 'Output file path (defaults to attachment filename)')
+    .action(
+      withErrorHandling(
+        async (conversationId: string, attachmentId: string, options: { output?: string }) => {
+          const convId = parseIdArg(conversationId, 'conversation');
+          const attId = parseIdArg(attachmentId, 'attachment');
+
+          // First, get attachment metadata to know the filename
+          const { attachments } = await client.listConversationAttachments(convId);
+          const attachment = attachments.find((a) => a.id === attId);
+
+          // Get the attachment data
+          const data = await client.getAttachmentData(convId, attId);
+
+          // Decode base64 and write to file
+          const buffer = Buffer.from(data.data, 'base64');
+          const outputPath = options.output || attachment?.filename || `attachment-${attId}`;
+          const resolvedPath = resolve(outputPath);
+          writeFileSync(resolvedPath, buffer);
+
+          outputJson({
+            message: 'Attachment downloaded',
+            path: resolvedPath,
+            size: buffer.length,
+            filename: attachment?.filename,
+          });
+        }
+      )
+    );
+
+  cmd
+    .command('attachment-upload')
+    .description('Upload an attachment to a thread')
+    .argument('<conversationId>', 'Conversation ID')
+    .argument('<threadId>', 'Thread ID')
+    .requiredOption('-f, --file <path>', 'Path to file to upload')
+    .option('--filename <name>', 'Override filename (defaults to original filename)')
+    .option('--mime-type <type>', 'Override MIME type (auto-detected from extension)')
+    .action(
+      withErrorHandling(
+        async (
+          conversationId: string,
+          threadId: string,
+          options: { file: string; filename?: string; mimeType?: string }
+        ) => {
+          const convId = parseIdArg(conversationId, 'conversation');
+          const thrId = parseIdArg(threadId, 'thread');
+
+          // Read file and encode as base64
+          const filePath = resolve(options.file);
+          const fileBuffer = readFileSync(filePath);
+          const base64Data = fileBuffer.toString('base64');
+
+          // Determine filename and MIME type
+          const fileName = options.filename || basename(filePath);
+          const mimeType = options.mimeType || lookup(filePath) || 'application/octet-stream';
+
+          await client.createAttachment(convId, thrId, {
+            fileName,
+            mimeType,
+            data: base64Data,
+          });
+
+          outputJson({
+            message: 'Attachment uploaded',
+            filename: fileName,
+            mimeType,
+            size: fileBuffer.length,
+          });
+        }
+      )
+    );
+
+  cmd
+    .command('attachment-delete')
+    .description('Delete an attachment (only works on draft conversations)')
+    .argument('<conversationId>', 'Conversation ID')
+    .argument('<attachmentId>', 'Attachment ID')
+    .option('-y, --yes', 'Skip confirmation')
+    .action(
+      withErrorHandling(
+        async (conversationId: string, attachmentId: string, options: { yes?: boolean }) => {
+          requireConfirmation('attachment', options.yes);
+          await client.deleteAttachment(
+            parseIdArg(conversationId, 'conversation'),
+            parseIdArg(attachmentId, 'attachment')
+          );
+          outputJson({ message: 'Attachment deleted' });
+        }
+      )
     );
 
   return cmd;

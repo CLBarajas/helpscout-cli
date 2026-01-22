@@ -41,6 +41,11 @@ const toolRegistry = [
   { name: 'list_teams', description: 'List all teams' },
   { name: 'get_team', description: 'Get team details' },
   { name: 'list_team_members', description: 'List members of a team' },
+  { name: 'list_conversation_attachments', description: 'List all attachments in a conversation (across all threads)' },
+  { name: 'get_attachment_data', description: 'Get attachment content as base64-encoded data' },
+  { name: 'create_attachment', description: 'Upload an attachment to a thread' },
+  { name: 'delete_attachment', description: 'Delete an attachment (only works on draft conversations)' },
+  { name: 'search_tools', description: 'Search for available tools by regex' },
 ];
 
 interface ConversationSummary {
@@ -507,6 +512,54 @@ server.tool(
     page: z.number().optional().describe('Page number'),
   },
   async ({ teamId, page }) => jsonResponse(await client.listTeamMembers(teamId, page))
+);
+
+// Attachments
+server.tool(
+  'list_conversation_attachments',
+  'List all attachments in a conversation (across all threads)',
+  { conversationId: z.number().describe('Conversation ID') },
+  async ({ conversationId }) => jsonResponse(await client.listConversationAttachments(conversationId))
+);
+
+server.tool(
+  'get_attachment_data',
+  'Get attachment content as base64-encoded data',
+  {
+    conversationId: z.number().describe('Conversation ID'),
+    attachmentId: z.number().describe('Attachment ID'),
+  },
+  async ({ conversationId, attachmentId }) =>
+    jsonResponse(await client.getAttachmentData(conversationId, attachmentId))
+);
+
+server.tool(
+  'create_attachment',
+  'Upload an attachment to a thread',
+  {
+    conversationId: z.number().describe('Conversation ID'),
+    threadId: z.number().describe('Thread ID'),
+    fileName: z.string().describe('Name of the attachment file'),
+    mimeType: z.string().describe('MIME type of the attachment (e.g., "image/png", "application/pdf")'),
+    data: z.string().describe('Base64-encoded file content'),
+  },
+  async ({ conversationId, threadId, fileName, mimeType, data }) => {
+    await client.createAttachment(conversationId, threadId, { fileName, mimeType, data });
+    return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'delete_attachment',
+  'Delete an attachment (only works on draft conversations)',
+  {
+    conversationId: z.number().describe('Conversation ID'),
+    attachmentId: z.number().describe('Attachment ID'),
+  },
+  async ({ conversationId, attachmentId }) => {
+    await client.deleteAttachment(conversationId, attachmentId);
+    return jsonResponse({ success: true });
+  }
 );
 
 server.tool(

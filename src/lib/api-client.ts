@@ -8,6 +8,8 @@ import type {
   Mailbox,
   Thread,
   PageInfo,
+  Attachment,
+  AttachmentData,
 } from '../types/index.js';
 
 const API_BASE = 'https://api.helpscout.net/v2';
@@ -596,6 +598,60 @@ export class HelpScoutClient {
       name: string;
       text: string;
     }>('GET', `/mailboxes/${mailboxId}/saved-replies/${savedReplyId}`);
+  }
+
+  // Attachments
+  // List all attachments across all threads in a conversation
+  async listConversationAttachments(conversationId: number): Promise<{
+    attachments: Array<Attachment & { threadId: number }>;
+  }> {
+    const threads = await this.getConversationThreads(conversationId);
+    const attachments: Array<Attachment & { threadId: number }> = [];
+
+    for (const thread of threads) {
+      const threadAttachments = thread._embedded?.attachments || [];
+      for (const attachment of threadAttachments) {
+        attachments.push({ ...attachment, threadId: thread.id });
+      }
+    }
+
+    return { attachments };
+  }
+
+  // Get attachment data (base64 encoded)
+  async getAttachmentData(
+    conversationId: number,
+    attachmentId: number
+  ): Promise<AttachmentData> {
+    return this.request<AttachmentData>(
+      'GET',
+      `/conversations/${conversationId}/attachments/${attachmentId}/data`
+    );
+  }
+
+  // Upload attachment to a thread
+  async createAttachment(
+    conversationId: number,
+    threadId: number,
+    data: {
+      fileName: string;
+      mimeType: string;
+      data: string; // Base64-encoded file content
+    }
+  ): Promise<void> {
+    await this.request<void>(
+      'POST',
+      `/conversations/${conversationId}/threads/${threadId}/attachments`,
+      { body: data }
+    );
+  }
+
+  // Delete attachment (only works on draft conversations)
+  async deleteAttachment(conversationId: number, attachmentId: number): Promise<void> {
+    await this.request<void>(
+      'DELETE',
+      `/conversations/${conversationId}/attachments/${attachmentId}`
+    );
   }
 }
 

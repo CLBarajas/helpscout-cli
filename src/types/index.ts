@@ -110,6 +110,28 @@ export interface Thread {
   bcc?: string[];
   createdAt: string;
   openedAt?: string;
+  _embedded?: {
+    attachments?: Attachment[];
+  };
+}
+
+export interface Attachment {
+  id: number;
+  filename: string;
+  mimeType: string;
+  width?: number;
+  height?: number;
+  size?: number;
+  state?: 'valid' | 'virus';
+  _links?: {
+    self?: { href: string };
+    data?: { href: string };
+    web?: { href: string };
+  };
+}
+
+export interface AttachmentData {
+  data: string; // Base64-encoded file content
 }
 
 export interface Customer {
