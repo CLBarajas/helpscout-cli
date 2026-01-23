@@ -600,6 +600,24 @@ export class HelpScoutClient {
     }>('GET', `/mailboxes/${mailboxId}/saved-replies/${savedReplyId}`);
   }
 
+  async createSavedReply(mailboxId: number, data: { name: string; text: string }) {
+    await this.request<void>('POST', `/mailboxes/${mailboxId}/saved-replies`, { body: data });
+  }
+
+  async updateSavedReply(
+    mailboxId: number,
+    savedReplyId: number,
+    data: { name?: string; text?: string }
+  ) {
+    await this.request<void>('PUT', `/mailboxes/${mailboxId}/saved-replies/${savedReplyId}`, {
+      body: data,
+    });
+  }
+
+  async deleteSavedReply(mailboxId: number, savedReplyId: number) {
+    await this.request<void>('DELETE', `/mailboxes/${mailboxId}/saved-replies/${savedReplyId}`);
+  }
+
   // Attachments
   // List all attachments across all threads in a conversation
   async listConversationAttachments(conversationId: number): Promise<{

@@ -29,6 +29,9 @@ const toolRegistry = [
   { name: 'list_workflows', description: 'List workflows with optional filtering' },
   { name: 'list_saved_replies', description: 'List saved replies for a mailbox' },
   { name: 'get_saved_reply', description: 'Get a saved reply with full text' },
+  { name: 'create_saved_reply', description: 'Create a new saved reply' },
+  { name: 'update_saved_reply', description: 'Update an existing saved reply' },
+  { name: 'delete_saved_reply', description: 'Delete a saved reply' },
   { name: 'create_note', description: 'Add a private note to a conversation' },
   { name: 'create_reply', description: 'Send a reply to a conversation (visible to customer)' },
   { name: 'add_tag', description: 'Add a tag to a conversation' },
@@ -337,6 +340,54 @@ server.tool(
   },
   async ({ mailboxId, savedReplyId }) =>
     jsonResponse(await client.getSavedReply(mailboxId, savedReplyId))
+);
+
+server.tool(
+  'create_saved_reply',
+  'Create a new saved reply',
+  {
+    mailboxId: z.number().describe('Mailbox ID'),
+    name: z.string().describe('Name for the saved reply'),
+    text: z.string().describe('HTML text content of the saved reply'),
+  },
+  async ({ mailboxId, name, text }) => {
+    await client.createSavedReply(mailboxId, { name, text });
+    return jsonResponse({ success: true, message: 'Saved reply created' });
+  }
+);
+
+server.tool(
+  'update_saved_reply',
+  'Update an existing saved reply',
+  {
+    mailboxId: z.number().describe('Mailbox ID'),
+    savedReplyId: z.number().describe('Saved Reply ID'),
+    name: z.string().optional().describe('New name for the saved reply'),
+    text: z.string().optional().describe('New HTML text content'),
+  },
+  async ({ mailboxId, savedReplyId, name, text }) => {
+    if (!name && !text) {
+      return jsonResponse({ error: 'At least one of name or text is required' });
+    }
+    const data: { name?: string; text?: string } = {};
+    if (name) data.name = name;
+    if (text) data.text = text;
+    await client.updateSavedReply(mailboxId, savedReplyId, data);
+    return jsonResponse({ success: true, message: 'Saved reply updated' });
+  }
+);
+
+server.tool(
+  'delete_saved_reply',
+  'Delete a saved reply',
+  {
+    mailboxId: z.number().describe('Mailbox ID'),
+    savedReplyId: z.number().describe('Saved Reply ID'),
+  },
+  async ({ mailboxId, savedReplyId }) => {
+    await client.deleteSavedReply(mailboxId, savedReplyId);
+    return jsonResponse({ success: true, message: 'Saved reply deleted' });
+  }
 );
 
 server.tool(
