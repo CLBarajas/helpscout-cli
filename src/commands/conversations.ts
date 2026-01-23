@@ -428,15 +428,25 @@ export function createConversationsCommand(): Command {
 
   cmd
     .command('set-field')
-    .description('Set a custom field value on a conversation')
+    .description('Set a custom field value on a conversation (preserves other fields)')
     .argument('<id>', 'Conversation ID')
     .requiredOption('--field-id <fieldId>', 'Custom field ID')
     .requiredOption('--value <value>', 'Field value')
     .action(
       withErrorHandling(async (id: string, options: { fieldId: string; value: string }) => {
-        await client.updateConversationFields(parseIdArg(id, 'conversation'), [
-          { id: parseInt(options.fieldId, 10), value: options.value },
-        ]);
+        const conversationId = parseIdArg(id, 'conversation');
+        const fieldId = parseInt(options.fieldId, 10);
+
+        // Fetch existing fields to preserve them
+        const existingFields = await client.getConversationFields(conversationId);
+
+        // Merge: update existing field or add new one
+        const fieldExists = existingFields.some((f) => f.id === fieldId);
+        const mergedFields = fieldExists
+          ? existingFields.map((f) => (f.id === fieldId ? { id: fieldId, value: options.value } : { id: f.id, value: f.value }))
+          : [...existingFields.map((f) => ({ id: f.id, value: f.value })), { id: fieldId, value: options.value }];
+
+        await client.updateConversationFields(conversationId, mergedFields);
         outputJson({ message: 'Field updated' });
       })
     );
