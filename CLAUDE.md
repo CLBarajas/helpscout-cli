@@ -35,7 +35,7 @@ The CLI follows a command-based architecture built on Commander.js:
 
 - **src/cli.ts**: Entry point that registers all commands and handles global flags (`--compact`)
 - **src/commands/**: Each file exports a `create*Command()` function that returns a Commander Command
-  - Commands: auth, mailboxes, conversations, customers, tags, workflows
+  - Commands: auth, mailboxes, conversations, customers, tags, workflows, users, teams, saved-replies, reports
 - **src/lib/**: Shared utilities and core functionality
   - **api-client.ts**: Main Help Scout API wrapper (`HelpScoutClient` class) - single source of truth for API calls
   - **auth.ts**: OS keychain integration via @napi-rs/keyring for secure credential storage
@@ -94,11 +94,19 @@ Base URL: `https://api.helpscout.net/v2`
 - Returns 429 when exceeded
 
 ### Key Endpoints Used
-- `/conversations` - List, view, delete conversations; manage threads, tags
-- `/customers` - CRUD operations on customers
+- `/conversations` - List, view, delete conversations; manage threads, tags, custom fields
+- `/customers` - CRUD operations on customers, emails, phones
 - `/tags` - List and view tags
 - `/workflows` - List, run manual workflows, activate/deactivate
-- `/mailboxes` - List and view mailboxes
+- `/mailboxes` - List, view mailboxes; list custom fields, saved replies
+- `/users` - List users, get current user
+- `/teams` - List teams, get team members
+- `/reports/company` - Company-wide performance metrics
+- `/reports/conversations` - Conversation volume, tags, workflows
+- `/reports/productivity` - Response/resolution times
+- `/reports/productivity/first-response-time` - Time series data
+- `/reports/happiness` - Customer satisfaction scores
+- `/reports/happiness/ratings` - Individual ratings
 - `/oauth2/token` - Authentication
 
 ## Build Configuration

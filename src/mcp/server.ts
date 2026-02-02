@@ -35,6 +35,8 @@ const toolRegistry = [
   { name: 'create_note', description: 'Add a private note to a conversation' },
   { name: 'create_reply', description: 'Send a reply to a conversation (visible to customer)' },
   { name: 'add_tag', description: 'Add a tag to a conversation' },
+  { name: 'snooze_conversation', description: 'Snooze a conversation until a specified date' },
+  { name: 'unsnooze_conversation', description: 'Immediately unsnooze a conversation' },
   { name: 'get_conversation_fields', description: 'Get custom field values for a conversation' },
   { name: 'update_conversation_fields', description: 'Update custom field values on a conversation' },
   { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
@@ -48,6 +50,12 @@ const toolRegistry = [
   { name: 'get_attachment_data', description: 'Get attachment content as base64-encoded data' },
   { name: 'create_attachment', description: 'Upload an attachment to a thread' },
   { name: 'delete_attachment', description: 'Delete an attachment (only works on draft conversations)' },
+  { name: 'get_company_report', description: 'Get company-wide performance metrics (Plus/Pro plans)' },
+  { name: 'get_conversations_report', description: 'Get conversation volume and activity metrics' },
+  { name: 'get_productivity_report', description: 'Get response and resolution time metrics' },
+  { name: 'get_happiness_report', description: 'Get customer satisfaction scores' },
+  { name: 'get_first_response_time', description: 'Get first response time as time series' },
+  { name: 'get_happiness_ratings', description: 'List individual customer satisfaction ratings' },
   { name: 'search_tools', description: 'Search for available tools by regex' },
 ];
 
@@ -443,6 +451,32 @@ server.tool(
 );
 
 server.tool(
+  'snooze_conversation',
+  'Snooze a conversation until a specified date',
+  {
+    conversationId: z.number().describe('Conversation ID'),
+    snoozedUntil: z.string().describe('Snooze until date (ISO 8601, e.g., 2026-02-10T09:00:00Z)'),
+    unsnoozeOnCustomerReply: z.boolean().optional().describe('Automatically unsnooze when customer replies'),
+  },
+  async ({ conversationId, snoozedUntil, unsnoozeOnCustomerReply }) => {
+    await client.snoozeConversation(conversationId, snoozedUntil, unsnoozeOnCustomerReply);
+    return jsonResponse({ success: true, snoozedUntil });
+  }
+);
+
+server.tool(
+  'unsnooze_conversation',
+  'Immediately unsnooze a conversation',
+  {
+    conversationId: z.number().describe('Conversation ID'),
+  },
+  async ({ conversationId }) => {
+    await client.unsnoozeConversation(conversationId);
+    return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
   'update_conversation',
   'Update conversation properties without adding a thread',
   {
@@ -611,6 +645,73 @@ server.tool(
     await client.deleteAttachment(conversationId, attachmentId);
     return jsonResponse({ success: true });
   }
+);
+
+// Reports (Plus/Pro plans only)
+const reportDateSchema = {
+  start: z.string().describe('Start date (ISO 8601, e.g., 2024-01-01T00:00:00Z)'),
+  end: z.string().describe('End date (ISO 8601)'),
+  previousStart: z.string().optional().describe('Previous period start for comparison'),
+  previousEnd: z.string().optional().describe('Previous period end'),
+  mailboxes: z.string().optional().describe('Filter by mailbox IDs (comma-separated)'),
+  tags: z.string().optional().describe('Filter by tag IDs (comma-separated)'),
+  types: z.string().optional().describe('Filter by types: email, chat, phone'),
+  folders: z.string().optional().describe('Filter by folder IDs (comma-separated)'),
+};
+
+server.tool(
+  'get_company_report',
+  'Get company-wide performance metrics including customers helped, replies, and user stats (Plus/Pro plans)',
+  reportDateSchema,
+  async (params) => jsonResponse(await client.getCompanyReport(params))
+);
+
+server.tool(
+  'get_conversations_report',
+  'Get conversation volume, busiest times, tag usage, and activity metrics',
+  reportDateSchema,
+  async (params) => jsonResponse(await client.getConversationsReport(params))
+);
+
+server.tool(
+  'get_productivity_report',
+  'Get response time, resolution time, and first response metrics',
+  {
+    ...reportDateSchema,
+    officeHours: z.boolean().optional().describe('Calculate within office hours only'),
+  },
+  async (params) => jsonResponse(await client.getProductivityReport(params))
+);
+
+server.tool(
+  'get_happiness_report',
+  'Get customer satisfaction scores (great/okay/not good percentages)',
+  reportDateSchema,
+  async (params) => jsonResponse(await client.getHappinessReport(params))
+);
+
+server.tool(
+  'get_first_response_time',
+  'Get first response time as time series data for charting',
+  {
+    ...reportDateSchema,
+    officeHours: z.boolean().optional().describe('Calculate within office hours only'),
+    viewBy: z.enum(['day', 'week', 'month']).optional().describe('Data granularity'),
+  },
+  async (params) => jsonResponse(await client.getFirstResponseTimeReport(params))
+);
+
+server.tool(
+  'get_happiness_ratings',
+  'List individual customer satisfaction ratings with comments',
+  {
+    ...reportDateSchema,
+    page: z.number().optional().describe('Page number'),
+    sortField: z.enum(['number', 'modifiedAt', 'rating']).optional().describe('Sort field'),
+    sortOrder: z.enum(['ASC', 'DESC']).optional().describe('Sort order'),
+    rating: z.enum(['great', 'ok', 'not-good', 'all']).optional().describe('Filter by rating'),
+  },
+  async (params) => jsonResponse(await client.getHappinessRatings(params))
 );
 
 server.tool(

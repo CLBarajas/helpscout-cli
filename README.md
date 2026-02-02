@@ -125,8 +125,53 @@ helpscout teams members 123
 
 ```bash
 helpscout saved-replies list 123           # List saved replies for mailbox 123
-helpscout saved-replies view 456           # View saved reply with full text
+helpscout saved-replies view 123 456       # View saved reply 456 in mailbox 123
 ```
+
+### Reports
+
+Reports are available on Plus and Pro plans only.
+
+```bash
+# Company-wide performance metrics
+helpscout reports company --start 2026-01-01T00:00:00Z --end 2026-01-31T23:59:59Z
+
+# Compare with previous period
+helpscout reports company \
+  --start 2026-01-01T00:00:00Z --end 2026-01-31T23:59:59Z \
+  --previous-start 2025-12-01T00:00:00Z --previous-end 2025-12-31T23:59:59Z
+
+# Conversation volume, tags, workflows, custom fields
+helpscout reports conversations --start 2026-01-01T00:00:00Z --end 2026-01-31T23:59:59Z
+
+# Response and resolution time metrics
+helpscout reports productivity --start 2026-01-01T00:00:00Z --end 2026-01-31T23:59:59Z
+helpscout reports productivity --start 2026-01-01T00:00:00Z --end 2026-01-31T23:59:59Z --office-hours
+
+# First response time as time series
+helpscout reports first-response-time --start 2026-01-01T00:00:00Z --end 2026-01-31T23:59:59Z --view-by day
+
+# Customer satisfaction scores
+helpscout reports happiness --start 2026-01-01T00:00:00Z --end 2026-01-31T23:59:59Z
+
+# Individual satisfaction ratings
+helpscout reports ratings --start 2026-01-01T00:00:00Z --end 2026-01-31T23:59:59Z --rating great
+```
+
+**Report Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--start` | Start date (ISO 8601, required) |
+| `--end` | End date (ISO 8601, required) |
+| `--previous-start` | Previous period start (for comparison) |
+| `--previous-end` | Previous period end |
+| `--mailboxes` | Filter by mailbox IDs (comma-separated) |
+| `--tags` | Filter by tag IDs (comma-separated) |
+| `--types` | Filter by types: email, chat, phone |
+| `--folders` | Filter by folder IDs (comma-separated) |
+| `--office-hours` | Calculate times within office hours (productivity) |
+| `--view-by` | Data granularity: day, week, month (first-response-time) |
 
 ### MCP Server
 

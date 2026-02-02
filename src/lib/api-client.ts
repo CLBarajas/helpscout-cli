@@ -10,6 +10,16 @@ import type {
   PageInfo,
   Attachment,
   AttachmentData,
+  CompanyReport,
+  ConversationsReport,
+  ProductivityReport,
+  HappinessReport,
+  FirstResponseTimeReport,
+  HappinessRatingsReport,
+  ReportParams,
+  ProductivityReportParams,
+  TimeSeriesReportParams,
+  HappinessRatingsParams,
 } from '../types/index.js';
 
 const API_BASE = 'https://api.helpscout.net/v2';
@@ -618,6 +628,23 @@ export class HelpScoutClient {
     await this.request<void>('DELETE', `/mailboxes/${mailboxId}/saved-replies/${savedReplyId}`);
   }
 
+  // Snooze
+  async snoozeConversation(
+    conversationId: number,
+    snoozedUntil: string,
+    unsnoozeOnCustomerReply?: boolean
+  ) {
+    const body = {
+      snoozedUntil,
+      unsnoozeOnCustomerReply: unsnoozeOnCustomerReply ?? false,
+    };
+    await this.request<void>('PUT', `/conversations/${conversationId}/snooze`, { body });
+  }
+
+  async unsnoozeConversation(conversationId: number) {
+    await this.request<void>('DELETE', `/conversations/${conversationId}/snooze`);
+  }
+
   // Attachments
   // List all attachments across all threads in a conversation
   async listConversationAttachments(conversationId: number): Promise<{
@@ -670,6 +697,43 @@ export class HelpScoutClient {
       'DELETE',
       `/conversations/${conversationId}/attachments/${attachmentId}`
     );
+  }
+
+  // Reports (Plus/Pro plans only)
+  async getCompanyReport(params: ReportParams): Promise<CompanyReport> {
+    return this.request<CompanyReport>('GET', '/reports/company', {
+      params: params as unknown as Record<string, string | number | boolean | undefined>,
+    });
+  }
+
+  async getConversationsReport(params: ReportParams): Promise<ConversationsReport> {
+    return this.request<ConversationsReport>('GET', '/reports/conversations', {
+      params: params as unknown as Record<string, string | number | boolean | undefined>,
+    });
+  }
+
+  async getProductivityReport(params: ProductivityReportParams): Promise<ProductivityReport> {
+    return this.request<ProductivityReport>('GET', '/reports/productivity', {
+      params: params as unknown as Record<string, string | number | boolean | undefined>,
+    });
+  }
+
+  async getFirstResponseTimeReport(params: TimeSeriesReportParams): Promise<FirstResponseTimeReport> {
+    return this.request<FirstResponseTimeReport>('GET', '/reports/productivity/first-response-time', {
+      params: params as unknown as Record<string, string | number | boolean | undefined>,
+    });
+  }
+
+  async getHappinessReport(params: ReportParams): Promise<HappinessReport> {
+    return this.request<HappinessReport>('GET', '/reports/happiness', {
+      params: params as unknown as Record<string, string | number | boolean | undefined>,
+    });
+  }
+
+  async getHappinessRatings(params: HappinessRatingsParams): Promise<HappinessRatingsReport> {
+    return this.request<HappinessRatingsReport>('GET', '/reports/happiness/ratings', {
+      params: params as unknown as Record<string, string | number | boolean | undefined>,
+    });
   }
 }
 

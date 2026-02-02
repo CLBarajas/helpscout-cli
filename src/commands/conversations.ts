@@ -451,6 +451,37 @@ export function createConversationsCommand(): Command {
       })
     );
 
+  // Snooze commands
+  cmd
+    .command('snooze')
+    .description('Snooze a conversation until a specified date')
+    .argument('<id>', 'Conversation ID')
+    .requiredOption('--until <date>', 'Snooze until date (ISO 8601, e.g., 2026-02-10T09:00:00Z)')
+    .option('--unsnooze-on-reply', 'Automatically unsnooze when customer replies')
+    .action(
+      withErrorHandling(
+        async (id: string, options: { until: string; unsnoozeOnReply?: boolean }) => {
+          await client.snoozeConversation(
+            parseIdArg(id, 'conversation'),
+            options.until,
+            options.unsnoozeOnReply
+          );
+          outputJson({ message: 'Conversation snoozed', snoozedUntil: options.until });
+        }
+      )
+    );
+
+  cmd
+    .command('unsnooze')
+    .description('Immediately unsnooze a conversation')
+    .argument('<id>', 'Conversation ID')
+    .action(
+      withErrorHandling(async (id: string) => {
+        await client.unsnoozeConversation(parseIdArg(id, 'conversation'));
+        outputJson({ message: 'Conversation unsnoozed' });
+      })
+    );
+
   // Attachment commands
   cmd
     .command('attachments')
