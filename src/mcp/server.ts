@@ -57,7 +57,7 @@ server.tool(
   {
     status: z
       .enum(['active', 'pending', 'closed', 'spam', 'all'])
-      .default('all')
+      .optional()
       .describe('Conversation status filter (defaults to "all" to include resolved tickets)'),
     mailbox: z.string().optional().describe('Mailbox ID to filter by'),
     tag: z.string().optional().describe('Tag to filter by'),
@@ -69,7 +69,7 @@ server.tool(
     modifiedSince: z.string().optional().describe('Show conversations modified after this date'),
     modifiedBefore: z.string().optional().describe('Show conversations modified before this date'),
   },
-  async ({ status, mailbox, tag, assignedTo, query, page, createdSince, createdBefore, modifiedSince, modifiedBefore }) => {
+  async ({ status = 'all', mailbox, tag, assignedTo, query, page, createdSince, createdBefore, modifiedSince, modifiedBefore }) => {
     const dateQuery = buildDateQuery({ createdSince, createdBefore, modifiedSince, modifiedBefore }, query);
     return jsonResponse(await client.listConversations({ status, mailbox, tag, assignedTo, query: dateQuery, page }));
   }
@@ -97,13 +97,13 @@ server.tool(
   'Search all conversations matching a query (fetches all pages)',
   {
     query: z.string().optional().describe('Search query (e.g., "email:domain.com", "subject:billing")'),
-    status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).default('all').describe('Status filter (defaults to "all" to include resolved tickets)'),
+    status: z.enum(['active', 'pending', 'closed', 'spam', 'all']).optional().describe('Status filter (defaults to "all" to include resolved tickets)'),
     createdSince: z.string().optional().describe('Show conversations created after this date (ISO 8601)'),
     createdBefore: z.string().optional().describe('Show conversations created before this date'),
     modifiedSince: z.string().optional().describe('Show conversations modified after this date'),
     modifiedBefore: z.string().optional().describe('Show conversations modified before this date'),
   },
-  async ({ query, status, createdSince, createdBefore, modifiedSince, modifiedBefore }) => {
+  async ({ query, status = 'all', createdSince, createdBefore, modifiedSince, modifiedBefore }) => {
     const dateQuery = buildDateQuery({ createdSince, createdBefore, modifiedSince, modifiedBefore }, query);
     return jsonResponse(await client.listAllConversations({ query: dateQuery, status }));
   }
