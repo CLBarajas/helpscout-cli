@@ -1,6 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 import { client } from '../lib/api-client.js';
 import { auth } from '../lib/auth.js';
 import { buildDateQuery } from '../lib/dates.js';
