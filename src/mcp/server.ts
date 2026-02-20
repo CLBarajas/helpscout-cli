@@ -42,7 +42,7 @@ const toolRegistry = [
   { name: 'get_conversation_fields', description: 'Get custom field values for a conversation' },
   { name: 'update_conversation_fields', description: 'Update custom field values on a conversation' },
   { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
-{ name: 'list_users', description: 'List users with optional mailbox filter' },
+  { name: 'list_users', description: 'List users with optional mailbox filter' },
   { name: 'get_user', description: 'Get detailed information about a specific user' },
   { name: 'get_current_user', description: 'Get the currently authenticated user' },
   { name: 'list_teams', description: 'List all teams' },
