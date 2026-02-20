@@ -196,6 +196,61 @@ export class HelpScoutClient {
     return response.json() as Promise<T>;
   }
 
+  private async requestForCreation(
+    path: string,
+    body: unknown,
+    options: { retry?: boolean; rateLimitRetry?: boolean } = {}
+  ): Promise<{ id: number; url: string }> {
+    const { retry = true, rateLimitRetry = true } = options;
+
+    const url = `${API_BASE}${path}`;
+    const token = await this.getAccessToken();
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown network error';
+      throw new HelpScoutCliError(`Network request failed: ${message}`, 0);
+    }
+
+    if (response.status === 401 && retry) {
+      this.accessToken = null;
+      await this.refreshAccessToken();
+      return this.requestForCreation(path, body, { ...options, retry: false });
+    }
+
+    if (response.status === 429 && rateLimitRetry) {
+      const retryAfter = parseInt(response.headers.get('Retry-After') || '60', 10);
+      const waitSeconds = Math.min(retryAfter, 120);
+      console.error(
+        JSON.stringify({ warning: `Rate limited. Waiting ${waitSeconds}s before retry...` })
+      );
+      await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
+      return this.requestForCreation(path, body, { ...options, rateLimitRetry: false });
+    }
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new HelpScoutApiError('API request failed', error, response.status);
+    }
+
+    const resourceId = response.headers.get('Resource-ID');
+    const webLocation = response.headers.get('Location') || '';
+
+    return {
+      id: resourceId ? parseInt(resourceId, 10) : 0,
+      url: webLocation,
+    };
+  }
+
   // Conversations
   async listConversations(
     params: {
@@ -273,6 +328,48 @@ export class HelpScoutClient {
     await this.request<void>('DELETE', `/conversations/${conversationId}`);
   }
 
+  async createConversation(data: {
+    subject: string;
+    customer: { email: string } | { id: number };
+    mailboxId: number;
+    text: string;
+    status?: string;
+    draft?: boolean;
+    user?: number;
+    assignTo?: number;
+    tags?: string[];
+  }): Promise<{ id: number; url: string }> {
+    const threads = [
+      {
+        type: 'reply' as const,
+        customer: data.customer,
+        text: data.text,
+        ...(data.draft && { draft: true }),
+      },
+    ];
+
+    const body: Record<string, unknown> = {
+      type: 'email',
+      subject: data.subject,
+      customer: data.customer,
+      mailboxId: data.mailboxId,
+      status: data.status || 'active',
+      threads,
+    };
+
+    if (data.user) {
+      body.user = data.user;
+    }
+    if (data.assignTo) {
+      body.assignTo = data.assignTo;
+    }
+    if (data.tags) {
+      body.tags = data.tags;
+    }
+
+    return this.requestForCreation('/conversations', body);
+  }
+
   async addConversationTag(conversationId: number, tag: string) {
     await this.request<void>('PUT', `/conversations/${conversationId}/tags`, {
       body: { tags: [tag] },
@@ -315,6 +412,18 @@ export class HelpScoutClient {
     }
   ) {
     await this.request<void>('POST', `/conversations/${conversationId}/notes`, { body: data });
+  }
+
+  async updateThread(
+    conversationId: number,
+    threadId: number,
+    operation: { op: 'replace'; path: '/text' | '/hidden'; value: string | boolean }
+  ) {
+    await this.request<void>(
+      'PATCH',
+      `/conversations/${conversationId}/threads/${threadId}`,
+      { body: operation }
+    );
   }
 
   // Customers
@@ -586,8 +695,18 @@ export class HelpScoutClient {
     conversationId: number,
     fields: Array<{ id: number; value: string }>
   ) {
+    // The API does a full PUT replace, so we must read-then-merge to avoid
+    // wiping fields the caller didn't intend to change.
+    const existing = await this.getConversationFields(conversationId);
+    const updateIds = new Set(fields.map((f) => f.id));
+    const merged = [
+      ...existing
+        .filter((f: { id: number }) => !updateIds.has(f.id))
+        .map((f: { id: number; value: string }) => ({ id: f.id, value: f.value })),
+      ...fields,
+    ];
     await this.request<void>('PUT', `/conversations/${conversationId}/fields`, {
-      body: { fields },
+      body: { fields: merged },
     });
   }
 

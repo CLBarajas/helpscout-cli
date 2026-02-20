@@ -3,6 +3,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { lookup } from 'mime-types';
 import { client } from '../lib/api-client.js';
+import { config } from '../lib/config.js';
+import { HelpScoutCliError } from '../lib/errors.js';
 import { outputJson, htmlToPlainText, buildName } from '../lib/output.js';
 import { withErrorHandling, requireConfirmation, parseIdArg } from '../lib/command-utils.js';
 import { buildDateQuery } from '../lib/dates.js';
@@ -264,6 +266,73 @@ export function createConversationsCommand(): Command {
     );
 
   cmd
+    .command('create')
+    .description('Create a new conversation')
+    .requiredOption('--subject <text>', 'Subject line')
+    .requiredOption('--text <text>', 'Message body')
+    .option('--customer-email <email>', 'Customer email (or use --customer-id)')
+    .option('--customer-id <id>', 'Customer ID (or use --customer-email)')
+    .option('-m, --mailbox <id>', 'Mailbox ID (defaults to configured default)')
+    .option('--status <status>', 'Conversation status: active, closed, pending (default: active)')
+    .option('--draft', 'Save as draft without sending')
+    .option('--user <id>', 'User ID sending the message')
+    .option('--assign-to <id>', 'Assign to user ID')
+    .option('--tags <tags>', 'Comma-separated tag names')
+    .action(
+      withErrorHandling(
+        async (options: {
+          subject: string;
+          text: string;
+          customerEmail?: string;
+          customerId?: string;
+          mailbox?: string;
+          status?: string;
+          draft?: boolean;
+          user?: string;
+          assignTo?: string;
+          tags?: string;
+        }) => {
+          if (options.customerEmail && options.customerId) {
+            throw new HelpScoutCliError('Provide --customer-email or --customer-id, not both', 1);
+          }
+          if (!options.customerEmail && !options.customerId) {
+            throw new HelpScoutCliError('Either --customer-email or --customer-id is required', 1);
+          }
+
+          const mailboxId = options.mailbox || config.getDefaultMailbox();
+          if (!mailboxId) {
+            throw new HelpScoutCliError(
+              'Mailbox ID required. Use --mailbox or set a default with: helpscout mailboxes set-default <id>',
+              1
+            );
+          }
+
+          const customer = options.customerEmail
+            ? { email: options.customerEmail }
+            : { id: parseIdArg(options.customerId!, 'customer') };
+
+          const result = await client.createConversation({
+            subject: options.subject,
+            customer,
+            mailboxId: parseInt(String(mailboxId), 10),
+            text: options.text,
+            status: options.status,
+            draft: options.draft,
+            user: options.user ? parseIdArg(options.user, 'user') : undefined,
+            assignTo: options.assignTo ? parseIdArg(options.assignTo, 'user') : undefined,
+            tags: options.tags ? options.tags.split(',').map((t) => t.trim()) : undefined,
+          });
+
+          outputJson({
+            message: 'Conversation created',
+            id: result.id,
+            url: result.url,
+          });
+        }
+      )
+    );
+
+  cmd
     .command('add-tag')
     .description('Add a tag to a conversation')
     .argument('<id>', 'Conversation ID')
@@ -449,6 +518,65 @@ export function createConversationsCommand(): Command {
         await client.updateConversationFields(conversationId, mergedFields);
         outputJson({ message: 'Field updated' });
       })
+    );
+
+  cmd
+    .command('update-thread')
+    .description('Update a thread (change text or hide/unhide)')
+    .argument('<conversationId>', 'Conversation ID')
+    .argument('<threadId>', 'Thread ID')
+    .option('--text <text>', 'Update thread text')
+    .option('--hidden', 'Hide the thread')
+    .option('--visible', 'Unhide the thread')
+    .action(
+      withErrorHandling(
+        async (
+          conversationId: string,
+          threadId: string,
+          options: {
+            text?: string;
+            hidden?: boolean;
+            visible?: boolean;
+          }
+        ) => {
+          if (options.hidden && options.visible) {
+            throw new HelpScoutCliError('--hidden and --visible are mutually exclusive', 1);
+          }
+          if (!options.text && !options.hidden && !options.visible) {
+            throw new HelpScoutCliError(
+              'At least one option is required: --text, --hidden, or --visible',
+              1
+            );
+          }
+
+          const convId = parseIdArg(conversationId, 'conversation');
+          const thrId = parseIdArg(threadId, 'thread');
+
+          if (options.text) {
+            await client.updateThread(convId, thrId, {
+              op: 'replace',
+              path: '/text',
+              value: options.text,
+            });
+          }
+          if (options.hidden) {
+            await client.updateThread(convId, thrId, {
+              op: 'replace',
+              path: '/hidden',
+              value: true,
+            });
+          }
+          if (options.visible) {
+            await client.updateThread(convId, thrId, {
+              op: 'replace',
+              path: '/hidden',
+              value: false,
+            });
+          }
+
+          outputJson({ message: 'Thread updated' });
+        }
+      )
     );
 
   // Snooze commands
