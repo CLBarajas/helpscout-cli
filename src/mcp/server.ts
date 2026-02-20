@@ -11,6 +11,7 @@ const toolRegistry = [
   { name: 'get_conversation', description: 'Get detailed information about a specific conversation including threads' },
   { name: 'search_conversations', description: 'Search all conversations matching a query (fetches all pages)' },
   { name: 'get_conversations_summary', description: 'Get aggregated summary of conversations by status and tag (for weekly briefings)' },
+  { name: 'create_conversation', description: 'Create a new conversation' },
   { name: 'update_conversation', description: 'Update conversation properties without adding a thread' },
   { name: 'list_mailboxes', description: 'List all mailboxes in the Help Scout account' },
   { name: 'get_mailbox', description: 'Get detailed information about a specific mailbox' },
@@ -35,6 +36,7 @@ const toolRegistry = [
   { name: 'create_note', description: 'Add a private note to a conversation' },
   { name: 'create_reply', description: 'Send a reply to a conversation (visible to customer)' },
   { name: 'add_tag', description: 'Add a tag to a conversation' },
+  { name: 'remove_tag', description: 'Remove a tag from a conversation' },
   { name: 'snooze_conversation', description: 'Snooze a conversation until a specified date' },
   { name: 'unsnooze_conversation', description: 'Immediately unsnooze a conversation' },
   { name: 'get_conversation_fields', description: 'Get custom field values for a conversation' },
@@ -56,6 +58,7 @@ const toolRegistry = [
   { name: 'get_happiness_report', description: 'Get customer satisfaction scores' },
   { name: 'get_first_response_time', description: 'Get first response time as time series' },
   { name: 'get_happiness_ratings', description: 'List individual customer satisfaction ratings' },
+  { name: 'update_thread', description: 'Update a thread (change text or hide/unhide)' },
   { name: 'search_tools', description: 'Search for available tools by regex' },
 ];
 
@@ -162,6 +165,52 @@ server.tool(
     const dateQuery = buildDateQuery({ createdSince, createdBefore, modifiedSince, modifiedBefore });
     const conversations = await client.listAllConversations({ status, mailbox, tag, query: dateQuery });
     return jsonResponse(summarizeConversations(conversations));
+  }
+);
+
+server.tool(
+  'create_conversation',
+  'Create a new conversation',
+  {
+    subject: z.string().describe('Subject line'),
+    customerEmail: z.string().optional().describe('Customer email (provide this or customerId)'),
+    customerId: z.number().optional().describe('Customer ID (provide this or customerEmail)'),
+    mailboxId: z.number().describe('Mailbox ID'),
+    text: z.string().describe('Message body'),
+    status: z.enum(['active', 'closed', 'pending']).optional().describe('Conversation status (default: active)'),
+    draft: z.boolean().optional().describe('Save as draft without sending'),
+    user: z.number().optional().describe('User ID sending the message'),
+    assignTo: z.number().optional().describe('Assign to user ID'),
+    tags: z.array(z.string()).optional().describe('Tag names to apply'),
+  },
+  async ({ subject, customerEmail, customerId, mailboxId, text, status, draft, user, assignTo, tags }) => {
+    if (customerEmail && customerId) {
+      return jsonResponse({ error: 'Provide customerEmail or customerId, not both' });
+    }
+    if (!customerEmail && !customerId) {
+      return jsonResponse({ error: 'Either customerEmail or customerId is required' });
+    }
+
+    const customer = customerEmail ? { email: customerEmail } : { id: customerId! };
+
+    const result = await client.createConversation({
+      subject,
+      customer,
+      mailboxId,
+      text,
+      status,
+      draft,
+      user,
+      assignTo,
+      tags,
+    });
+
+    return jsonResponse({
+      success: true,
+      id: result.id,
+      url: result.url,
+      message: 'Conversation created',
+    });
   }
 );
 
@@ -451,6 +500,19 @@ server.tool(
 );
 
 server.tool(
+  'remove_tag',
+  'Remove a tag from a conversation',
+  {
+    conversationId: z.number().describe('Conversation ID'),
+    tag: z.string().describe('Tag name to remove'),
+  },
+  async ({ conversationId, tag }) => {
+    await client.removeConversationTag(conversationId, tag);
+    return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
   'snooze_conversation',
   'Snooze a conversation until a specified date',
   {
@@ -472,6 +534,39 @@ server.tool(
   },
   async ({ conversationId }) => {
     await client.unsnoozeConversation(conversationId);
+    return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'update_thread',
+  'Update a thread (change text or hide/unhide)',
+  {
+    conversationId: z.number().describe('Conversation ID'),
+    threadId: z.number().describe('Thread ID'),
+    text: z.string().optional().describe('New thread text'),
+    hidden: z.boolean().optional().describe('Hide (true) or unhide (false) the thread'),
+  },
+  async ({ conversationId, threadId, text, hidden }) => {
+    if (text === undefined && hidden === undefined) {
+      return jsonResponse({ error: 'At least one of text or hidden is required' });
+    }
+
+    if (text !== undefined) {
+      await client.updateThread(conversationId, threadId, {
+        op: 'replace',
+        path: '/text',
+        value: text,
+      });
+    }
+    if (hidden !== undefined) {
+      await client.updateThread(conversationId, threadId, {
+        op: 'replace',
+        path: '/hidden',
+        value: hidden,
+      });
+    }
+
     return jsonResponse({ success: true });
   }
 );
