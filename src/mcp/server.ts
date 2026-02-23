@@ -39,6 +39,7 @@ const toolRegistry = [
   { name: 'remove_tag', description: 'Remove a tag from a conversation' },
   { name: 'snooze_conversation', description: 'Snooze a conversation until a specified date' },
   { name: 'unsnooze_conversation', description: 'Immediately unsnooze a conversation' },
+  { name: 'delete_conversation', description: 'Delete a conversation' },
   { name: 'get_conversation_fields', description: 'Get custom field values for a conversation' },
   { name: 'update_conversation_fields', description: 'Update custom field values on a conversation' },
   { name: 'check_auth', description: 'Check if Help Scout authentication is configured' },
@@ -568,6 +569,18 @@ server.tool(
     }
 
     return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'delete_conversation',
+  'Delete a conversation',
+  {
+    conversationId: z.number().describe('Conversation ID'),
+  },
+  async ({ conversationId }) => {
+    await client.deleteConversation(conversationId);
+    return jsonResponse({ success: true, message: 'Conversation deleted' });
   }
 );
 
