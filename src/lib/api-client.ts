@@ -371,14 +371,19 @@ export class HelpScoutClient {
   }
 
   async addConversationTag(conversationId: number, tag: string) {
+    const conversation = await this.getConversation(conversationId);
+    const existingTags = conversation?.tags?.map((t) => (t as any).tag || t.name).filter(Boolean) || [];
+    if (!existingTags.includes(tag)) {
+      existingTags.push(tag);
+    }
     await this.request<void>('PUT', `/conversations/${conversationId}/tags`, {
-      body: { tags: [tag] },
+      body: { tags: existingTags },
     });
   }
 
   async removeConversationTag(conversationId: number, tag: string) {
     const conversation = await this.getConversation(conversationId);
-    const existingTags = conversation?.tags?.map((t) => t.name) || [];
+    const existingTags = conversation?.tags?.map((t) => (t as any).tag || t.name).filter(Boolean) || [];
     const newTags = existingTags.filter((t) => t !== tag);
     await this.request<void>('PUT', `/conversations/${conversationId}/tags`, {
       body: { tags: newTags },
