@@ -104,7 +104,7 @@ server.tool(
     tag: z.string().optional().describe('Tag to filter by'),
     assignedTo: z.string().optional().describe('User ID assigned to'),
     query: z.string().optional().describe('Search query'),
-    page: z.number().optional().describe('Page number'),
+    page: z.coerce.number().optional().describe('Page number'),
     createdSince: z.string().optional().describe('Show conversations created after this date (ISO 8601 or natural language like "2026-01-05")'),
     createdBefore: z.string().optional().describe('Show conversations created before this date'),
     modifiedSince: z.string().optional().describe('Show conversations modified after this date'),
@@ -120,7 +120,7 @@ server.tool(
   'get_conversation',
   'Get detailed information about a specific conversation including threads',
   {
-    conversationId: z.number().describe('Conversation ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
     includeThreads: z.boolean().optional().describe('Include conversation threads'),
   },
   async ({ conversationId, includeThreads }) => {
@@ -175,13 +175,13 @@ server.tool(
   {
     subject: z.string().describe('Subject line'),
     customerEmail: z.string().optional().describe('Customer email (provide this or customerId)'),
-    customerId: z.number().optional().describe('Customer ID (provide this or customerEmail)'),
-    mailboxId: z.number().describe('Mailbox ID'),
+    customerId: z.coerce.number().optional().describe('Customer ID (provide this or customerEmail)'),
+    mailboxId: z.coerce.number().describe('Mailbox ID'),
     text: z.string().describe('Message body'),
     status: z.enum(['active', 'closed', 'pending']).optional().describe('Conversation status (default: active)'),
     draft: z.boolean().optional().describe('Save as draft without sending'),
-    user: z.number().optional().describe('User ID sending the message'),
-    assignTo: z.number().optional().describe('Assign to user ID'),
+    user: z.coerce.number().optional().describe('User ID sending the message'),
+    assignTo: z.coerce.number().optional().describe('Assign to user ID'),
     tags: z.array(z.string()).optional().describe('Tag names to apply'),
   },
   async ({ subject, customerEmail, customerId, mailboxId, text, status, draft, user, assignTo, tags }) => {
@@ -222,14 +222,14 @@ server.tool('list_mailboxes', 'List all mailboxes in the Help Scout account', {}
 server.tool(
   'get_mailbox',
   'Get detailed information about a specific mailbox',
-  { mailboxId: z.number().describe('Mailbox ID') },
+  { mailboxId: z.coerce.number().describe('Mailbox ID') },
   async ({ mailboxId }) => jsonResponse(await client.getMailbox(mailboxId))
 );
 
 server.tool(
   'list_mailbox_fields',
   'List custom fields for a mailbox',
-  { mailboxId: z.number().describe('Mailbox ID') },
+  { mailboxId: z.coerce.number().describe('Mailbox ID') },
   async ({ mailboxId }) => jsonResponse(await client.listMailboxFields(mailboxId))
 );
 
@@ -240,7 +240,7 @@ server.tool(
     query: z.string().optional().describe('Search query'),
     firstName: z.string().optional().describe('Filter by first name'),
     lastName: z.string().optional().describe('Filter by last name'),
-    page: z.number().optional().describe('Page number'),
+    page: z.coerce.number().optional().describe('Page number'),
   },
   async ({ query, firstName, lastName, page }) =>
     jsonResponse(await client.listCustomers({ query, firstName, lastName, page }))
@@ -249,7 +249,7 @@ server.tool(
 server.tool(
   'get_customer',
   'Get detailed information about a specific customer',
-  { customerId: z.number().describe('Customer ID') },
+  { customerId: z.coerce.number().describe('Customer ID') },
   async ({ customerId }) => jsonResponse(await client.getCustomer(customerId))
 );
 
@@ -257,7 +257,7 @@ server.tool(
 server.tool(
   'list_customer_emails',
   'List emails for a customer',
-  { customerId: z.number().describe('Customer ID') },
+  { customerId: z.coerce.number().describe('Customer ID') },
   async ({ customerId }) => jsonResponse(await client.listCustomerEmails(customerId))
 );
 
@@ -265,7 +265,7 @@ server.tool(
   'create_customer_email',
   'Add an email to a customer',
   {
-    customerId: z.number().describe('Customer ID'),
+    customerId: z.coerce.number().describe('Customer ID'),
     type: z.enum(['home', 'work', 'other']).describe('Email type'),
     value: z.string().describe('Email address'),
   },
@@ -279,8 +279,8 @@ server.tool(
   'update_customer_email',
   'Update a customer email',
   {
-    customerId: z.number().describe('Customer ID'),
-    emailId: z.number().describe('Email ID'),
+    customerId: z.coerce.number().describe('Customer ID'),
+    emailId: z.coerce.number().describe('Email ID'),
     type: z.enum(['home', 'work', 'other']).optional().describe('Email type'),
     value: z.string().optional().describe('Email address'),
   },
@@ -298,8 +298,8 @@ server.tool(
   'delete_customer_email',
   'Delete a customer email',
   {
-    customerId: z.number().describe('Customer ID'),
-    emailId: z.number().describe('Email ID'),
+    customerId: z.coerce.number().describe('Customer ID'),
+    emailId: z.coerce.number().describe('Email ID'),
   },
   async ({ customerId, emailId }) => {
     await client.deleteCustomerEmail(customerId, emailId);
@@ -311,7 +311,7 @@ server.tool(
 server.tool(
   'list_customer_phones',
   'List phones for a customer',
-  { customerId: z.number().describe('Customer ID') },
+  { customerId: z.coerce.number().describe('Customer ID') },
   async ({ customerId }) => jsonResponse(await client.listCustomerPhones(customerId))
 );
 
@@ -319,7 +319,7 @@ server.tool(
   'create_customer_phone',
   'Add a phone to a customer',
   {
-    customerId: z.number().describe('Customer ID'),
+    customerId: z.coerce.number().describe('Customer ID'),
     type: z.enum(['home', 'work', 'mobile', 'fax', 'pager', 'other']).describe('Phone type'),
     value: z.string().describe('Phone number'),
   },
@@ -333,8 +333,8 @@ server.tool(
   'update_customer_phone',
   'Update a customer phone',
   {
-    customerId: z.number().describe('Customer ID'),
-    phoneId: z.number().describe('Phone ID'),
+    customerId: z.coerce.number().describe('Customer ID'),
+    phoneId: z.coerce.number().describe('Phone ID'),
     type: z.enum(['home', 'work', 'mobile', 'fax', 'pager', 'other']).optional().describe('Phone type'),
     value: z.string().optional().describe('Phone number'),
   },
@@ -352,8 +352,8 @@ server.tool(
   'delete_customer_phone',
   'Delete a customer phone',
   {
-    customerId: z.number().describe('Customer ID'),
-    phoneId: z.number().describe('Phone ID'),
+    customerId: z.coerce.number().describe('Customer ID'),
+    phoneId: z.coerce.number().describe('Phone ID'),
   },
   async ({ customerId, phoneId }) => {
     await client.deleteCustomerPhone(customerId, phoneId);
@@ -364,7 +364,7 @@ server.tool(
 server.tool(
   'list_tags',
   'List all tags in the Help Scout account',
-  { page: z.number().optional().describe('Page number') },
+  { page: z.coerce.number().optional().describe('Page number') },
   async ({ page }) => jsonResponse(await client.listTags(page))
 );
 
@@ -372,9 +372,9 @@ server.tool(
   'list_workflows',
   'List workflows with optional filtering',
   {
-    mailbox: z.number().optional().describe('Mailbox ID to filter by'),
+    mailbox: z.coerce.number().optional().describe('Mailbox ID to filter by'),
     type: z.enum(['automatic', 'manual']).optional().describe('Workflow type'),
-    page: z.number().optional().describe('Page number'),
+    page: z.coerce.number().optional().describe('Page number'),
   },
   async ({ mailbox, type, page }) => jsonResponse(await client.listWorkflows({ mailbox, type, page }))
 );
@@ -383,8 +383,8 @@ server.tool(
   'list_saved_replies',
   'List saved replies for a mailbox',
   {
-    mailboxId: z.number().describe('Mailbox ID'),
-    page: z.number().optional().describe('Page number'),
+    mailboxId: z.coerce.number().describe('Mailbox ID'),
+    page: z.coerce.number().optional().describe('Page number'),
   },
   async ({ mailboxId, page }) => jsonResponse(await client.listSavedReplies(mailboxId, page))
 );
@@ -393,8 +393,8 @@ server.tool(
   'get_saved_reply',
   'Get a saved reply with full text',
   {
-    mailboxId: z.number().describe('Mailbox ID'),
-    savedReplyId: z.number().describe('Saved Reply ID'),
+    mailboxId: z.coerce.number().describe('Mailbox ID'),
+    savedReplyId: z.coerce.number().describe('Saved Reply ID'),
   },
   async ({ mailboxId, savedReplyId }) =>
     jsonResponse(await client.getSavedReply(mailboxId, savedReplyId))
@@ -404,7 +404,7 @@ server.tool(
   'create_saved_reply',
   'Create a new saved reply',
   {
-    mailboxId: z.number().describe('Mailbox ID'),
+    mailboxId: z.coerce.number().describe('Mailbox ID'),
     name: z.string().describe('Name for the saved reply'),
     text: z.string().describe('HTML text content of the saved reply'),
   },
@@ -418,8 +418,8 @@ server.tool(
   'update_saved_reply',
   'Update an existing saved reply',
   {
-    mailboxId: z.number().describe('Mailbox ID'),
-    savedReplyId: z.number().describe('Saved Reply ID'),
+    mailboxId: z.coerce.number().describe('Mailbox ID'),
+    savedReplyId: z.coerce.number().describe('Saved Reply ID'),
     name: z.string().optional().describe('New name for the saved reply'),
     text: z.string().optional().describe('New HTML text content'),
   },
@@ -439,8 +439,8 @@ server.tool(
   'delete_saved_reply',
   'Delete a saved reply',
   {
-    mailboxId: z.number().describe('Mailbox ID'),
-    savedReplyId: z.number().describe('Saved Reply ID'),
+    mailboxId: z.coerce.number().describe('Mailbox ID'),
+    savedReplyId: z.coerce.number().describe('Saved Reply ID'),
   },
   async ({ mailboxId, savedReplyId }) => {
     await client.deleteSavedReply(mailboxId, savedReplyId);
@@ -452,7 +452,7 @@ server.tool(
   'create_note',
   'Add a private note to a conversation',
   {
-    conversationId: z.number().describe('Conversation ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
     text: z.string().describe('Note text content'),
     status: z
       .enum(['active', 'closed', 'pending'])
@@ -469,9 +469,9 @@ server.tool(
   'create_reply',
   'Send a reply to a conversation (visible to customer)',
   {
-    conversationId: z.number().describe('Conversation ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
     text: z.string().describe('Reply text content'),
-    user: z.number().optional().describe('User ID sending the reply'),
+    user: z.coerce.number().optional().describe('User ID sending the reply'),
     draft: z.boolean().optional().describe('Save as draft instead of sending'),
     status: z.enum(['active', 'closed', 'pending']).optional().describe('Set conversation status after reply'),
   },
@@ -491,7 +491,7 @@ server.tool(
   'add_tag',
   'Add a tag to a conversation',
   {
-    conversationId: z.number().describe('Conversation ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
     tag: z.string().describe('Tag name to add'),
   },
   async ({ conversationId, tag }) => {
@@ -504,7 +504,7 @@ server.tool(
   'remove_tag',
   'Remove a tag from a conversation',
   {
-    conversationId: z.number().describe('Conversation ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
     tag: z.string().describe('Tag name to remove'),
   },
   async ({ conversationId, tag }) => {
@@ -517,7 +517,7 @@ server.tool(
   'snooze_conversation',
   'Snooze a conversation until a specified date',
   {
-    conversationId: z.number().describe('Conversation ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
     snoozedUntil: z.string().describe('Snooze until date (ISO 8601, e.g., 2026-02-10T09:00:00Z)'),
     unsnoozeOnCustomerReply: z.boolean().optional().describe('Automatically unsnooze when customer replies'),
   },
@@ -531,7 +531,7 @@ server.tool(
   'unsnooze_conversation',
   'Immediately unsnooze a conversation',
   {
-    conversationId: z.number().describe('Conversation ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
   },
   async ({ conversationId }) => {
     await client.unsnoozeConversation(conversationId);
@@ -543,8 +543,8 @@ server.tool(
   'update_thread',
   'Update a thread (change text or hide/unhide)',
   {
-    conversationId: z.number().describe('Conversation ID'),
-    threadId: z.number().describe('Thread ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
+    threadId: z.coerce.number().describe('Thread ID'),
     text: z.string().optional().describe('New thread text'),
     hidden: z.boolean().optional().describe('Hide (true) or unhide (false) the thread'),
   },
@@ -576,7 +576,7 @@ server.tool(
   'delete_conversation',
   'Delete a conversation',
   {
-    conversationId: z.number().describe('Conversation ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
   },
   async ({ conversationId }) => {
     await client.deleteConversation(conversationId);
@@ -588,18 +588,18 @@ server.tool(
   'update_conversation',
   'Update conversation properties without adding a thread',
   {
-    conversationId: z.number().describe('Conversation ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
     status: z
       .enum(['active', 'closed', 'pending', 'spam'])
       .optional()
       .describe('Change conversation status'),
     assignee: z
-      .union([z.number(), z.literal('none')])
+      .union([z.coerce.number(), z.literal('none')])
       .optional()
       .describe('User ID to assign to, or "none" to unassign'),
-    customer: z.number().optional().describe('Change primary customer ID'),
+    customer: z.coerce.number().optional().describe('Change primary customer ID'),
     subject: z.string().optional().describe('Update subject line'),
-    mailbox: z.number().optional().describe('Move to different mailbox'),
+    mailbox: z.coerce.number().optional().describe('Move to different mailbox'),
   },
   async ({ conversationId, status, assignee, customer, subject, mailbox }) => {
     const operations: Array<{ op: string; path: string; value?: unknown }> = [];
@@ -634,7 +634,7 @@ server.tool(
 server.tool(
   'get_conversation_fields',
   'Get custom field values for a conversation',
-  { conversationId: z.number().describe('Conversation ID') },
+  { conversationId: z.coerce.number().describe('Conversation ID') },
   async ({ conversationId }) => jsonResponse(await client.getConversationFields(conversationId))
 );
 
@@ -642,11 +642,11 @@ server.tool(
   'update_conversation_fields',
   'Update custom field values on a conversation',
   {
-    conversationId: z.number().describe('Conversation ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
     fields: z
       .array(
         z.object({
-          id: z.number().describe('Field ID'),
+          id: z.coerce.number().describe('Field ID'),
           value: z.string().describe('Field value'),
         })
       )
@@ -666,8 +666,8 @@ server.tool(
   'list_users',
   'List users with optional mailbox filter',
   {
-    mailbox: z.number().optional().describe('Mailbox ID to filter by'),
-    page: z.number().optional().describe('Page number'),
+    mailbox: z.coerce.number().optional().describe('Mailbox ID to filter by'),
+    page: z.coerce.number().optional().describe('Page number'),
   },
   async ({ mailbox, page }) => jsonResponse(await client.listUsers({ mailbox, page }))
 );
@@ -675,7 +675,7 @@ server.tool(
 server.tool(
   'get_user',
   'Get detailed information about a specific user',
-  { userId: z.number().describe('User ID') },
+  { userId: z.coerce.number().describe('User ID') },
   async ({ userId }) => jsonResponse(await client.getUser(userId))
 );
 
@@ -686,14 +686,14 @@ server.tool('get_current_user', 'Get the currently authenticated user', {}, asyn
 server.tool(
   'list_teams',
   'List all teams',
-  { page: z.number().optional().describe('Page number') },
+  { page: z.coerce.number().optional().describe('Page number') },
   async ({ page }) => jsonResponse(await client.listTeams(page))
 );
 
 server.tool(
   'get_team',
   'Get team details',
-  { teamId: z.number().describe('Team ID') },
+  { teamId: z.coerce.number().describe('Team ID') },
   async ({ teamId }) => jsonResponse(await client.getTeam(teamId))
 );
 
@@ -701,8 +701,8 @@ server.tool(
   'list_team_members',
   'List members of a team',
   {
-    teamId: z.number().describe('Team ID'),
-    page: z.number().optional().describe('Page number'),
+    teamId: z.coerce.number().describe('Team ID'),
+    page: z.coerce.number().optional().describe('Page number'),
   },
   async ({ teamId, page }) => jsonResponse(await client.listTeamMembers(teamId, page))
 );
@@ -711,7 +711,7 @@ server.tool(
 server.tool(
   'list_conversation_attachments',
   'List all attachments in a conversation (across all threads)',
-  { conversationId: z.number().describe('Conversation ID') },
+  { conversationId: z.coerce.number().describe('Conversation ID') },
   async ({ conversationId }) => jsonResponse(await client.listConversationAttachments(conversationId))
 );
 
@@ -719,8 +719,8 @@ server.tool(
   'get_attachment_data',
   'Get attachment content as base64-encoded data',
   {
-    conversationId: z.number().describe('Conversation ID'),
-    attachmentId: z.number().describe('Attachment ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
+    attachmentId: z.coerce.number().describe('Attachment ID'),
   },
   async ({ conversationId, attachmentId }) =>
     jsonResponse(await client.getAttachmentData(conversationId, attachmentId))
@@ -730,8 +730,8 @@ server.tool(
   'create_attachment',
   'Upload an attachment to a thread',
   {
-    conversationId: z.number().describe('Conversation ID'),
-    threadId: z.number().describe('Thread ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
+    threadId: z.coerce.number().describe('Thread ID'),
     fileName: z.string().describe('Name of the attachment file'),
     mimeType: z.string().describe('MIME type of the attachment (e.g., "image/png", "application/pdf")'),
     data: z.string().describe('Base64-encoded file content'),
@@ -746,8 +746,8 @@ server.tool(
   'delete_attachment',
   'Delete an attachment (only works on draft conversations)',
   {
-    conversationId: z.number().describe('Conversation ID'),
-    attachmentId: z.number().describe('Attachment ID'),
+    conversationId: z.coerce.number().describe('Conversation ID'),
+    attachmentId: z.coerce.number().describe('Attachment ID'),
   },
   async ({ conversationId, attachmentId }) => {
     await client.deleteAttachment(conversationId, attachmentId);
@@ -814,7 +814,7 @@ server.tool(
   'List individual customer satisfaction ratings with comments',
   {
     ...reportDateSchema,
-    page: z.number().optional().describe('Page number'),
+    page: z.coerce.number().optional().describe('Page number'),
     sortField: z.enum(['number', 'modifiedAt', 'rating']).optional().describe('Sort field'),
     sortOrder: z.enum(['ASC', 'DESC']).optional().describe('Sort order'),
     rating: z.enum(['great', 'ok', 'not-good', 'all']).optional().describe('Filter by rating'),
