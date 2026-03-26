@@ -217,7 +217,8 @@ export class HelpScoutClient {
       assignedTo?: string;
       query?: string;
       embed?: string;
-    } = {}
+    } = {},
+    maxResults?: number,
   ): Promise<Conversation[]> {
     const allConversations: Conversation[] = [];
     let page = 1;
@@ -226,6 +227,9 @@ export class HelpScoutClient {
     do {
       const result = await this.listConversations({ ...params, page });
       allConversations.push(...result.conversations);
+      if (maxResults && allConversations.length >= maxResults) {
+        return allConversations.slice(0, maxResults);
+      }
       totalPages = result.page.totalPages;
       page++;
     } while (page <= totalPages);
