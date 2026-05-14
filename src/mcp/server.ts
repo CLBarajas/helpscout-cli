@@ -18,6 +18,9 @@ const toolRegistry = [
   { name: 'list_mailbox_fields', description: 'List custom fields for a mailbox' },
   { name: 'list_customers', description: 'List customers with optional filtering' },
   { name: 'get_customer', description: 'Get detailed information about a specific customer' },
+  { name: 'create_customer', description: 'Create a new customer' },
+  { name: 'update_customer', description: 'Update an existing customer' },
+  { name: 'delete_customer', description: 'Delete a customer' },
   { name: 'list_customer_emails', description: 'List emails for a customer' },
   { name: 'create_customer_email', description: 'Add an email to a customer' },
   { name: 'update_customer_email', description: 'Update a customer email' },
@@ -251,6 +254,63 @@ server.tool(
   'Get detailed information about a specific customer',
   { customerId: z.coerce.number().describe('Customer ID') },
   async ({ customerId }) => jsonResponse(await client.getCustomer(customerId))
+);
+
+server.tool(
+  'create_customer',
+  'Create a new customer',
+  {
+    firstName: z.string().optional().describe('First name'),
+    lastName: z.string().optional().describe('Last name'),
+    email: z.string().optional().describe('Email address'),
+    phone: z.string().optional().describe('Phone number'),
+  },
+  async ({ firstName, lastName, email, phone }) => {
+    const data = {
+      ...(firstName && { firstName }),
+      ...(lastName && { lastName }),
+      ...(email && { emails: [{ type: 'work', value: email }] }),
+      ...(phone && { phones: [{ type: 'work', value: phone }] }),
+    };
+    const result = await client.createCustomer(data);
+    return jsonResponse({ success: true, id: result.id, message: 'Customer created' });
+  }
+);
+
+server.tool(
+  'update_customer',
+  'Update an existing customer',
+  {
+    customerId: z.coerce.number().describe('Customer ID'),
+    firstName: z.string().optional().describe('First name'),
+    lastName: z.string().optional().describe('Last name'),
+    jobTitle: z.string().optional().describe('Job title'),
+    location: z.string().optional().describe('Location'),
+    organization: z.string().optional().describe('Organization'),
+    background: z.string().optional().describe('Background notes'),
+  },
+  async ({ customerId, firstName, lastName, jobTitle, location, organization, background }) => {
+    const data = {
+      ...(firstName && { firstName }),
+      ...(lastName && { lastName }),
+      ...(jobTitle && { jobTitle }),
+      ...(location && { location }),
+      ...(organization && { organization }),
+      ...(background && { background }),
+    };
+    await client.updateCustomer(customerId, data);
+    return jsonResponse({ success: true });
+  }
+);
+
+server.tool(
+  'delete_customer',
+  'Delete a customer',
+  { customerId: z.coerce.number().describe('Customer ID') },
+  async ({ customerId }) => {
+    await client.deleteCustomer(customerId);
+    return jsonResponse({ success: true });
+  }
 );
 
 // Customer Emails

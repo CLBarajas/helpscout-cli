@@ -28,6 +28,7 @@ interface ConversationSummary {
     tags: string[];
     customer: ParticipantInfo;
     user: ParticipantInfo;
+    noteCount: number;
   }>;
 }
 
@@ -46,11 +47,13 @@ function buildPersonName(info: { first?: string; last?: string } | undefined): s
 function extractThreadInfo(threads: Thread[] | undefined): {
   customer: ParticipantInfo;
   user: ParticipantInfo;
+  noteCount: number;
 } {
   if (!threads?.length) {
     return {
       customer: { messageCount: 0 },
       user: { messageCount: 0 },
+      noteCount: 0,
     };
   }
 
@@ -60,6 +63,7 @@ function extractThreadInfo(threads: Thread[] | undefined): {
 
   const customerThreads = sortedThreads.filter((t) => t.type === 'customer');
   const userThreads = sortedThreads.filter((t) => t.type === 'message');
+  const noteThreads = sortedThreads.filter((t) => t.type === 'note');
 
   const firstCustomerWithBody = customerThreads.find((t) => t.body);
   const firstUserWithBody = userThreads.find((t) => t.body);
@@ -85,6 +89,7 @@ function extractThreadInfo(threads: Thread[] | undefined): {
         ? truncate(htmlToPlainText(firstUserWithBody.body))
         : undefined,
     },
+    noteCount: noteThreads.length,
   };
 }
 
@@ -220,9 +225,8 @@ export function createConversationsCommand(): Command {
 
   cmd
     .command('threads')
-    .description('List threads for a conversation (defaults to email communications only)')
+    .description('List threads for a conversation (customer, agent, note, chat, phone by default)')
     .argument('<id>', 'Conversation ID')
-    .option('--include-notes', 'Include internal notes')
     .option('--all', 'Show all thread types including lineitems, workflows, etc.')
     .option(
       '-t, --type <types>',
@@ -233,7 +237,7 @@ export function createConversationsCommand(): Command {
       withErrorHandling(
         async (
           id: string,
-          options: { includeNotes?: boolean; all?: boolean; type?: string; html?: boolean }
+          options: { all?: boolean; type?: string; html?: boolean }
         ) => {
           let threads = await client.getConversationThreads(parseIdArg(id, 'conversation'));
 
@@ -241,9 +245,7 @@ export function createConversationsCommand(): Command {
             const types = options.type.split(',').map((t) => t.trim().toLowerCase());
             threads = threads.filter((t) => types.includes(t.type));
           } else if (!options.all) {
-            const allowedTypes = options.includeNotes
-              ? ['customer', 'message', 'note', 'chat', 'phone']
-              : ['customer', 'message', 'chat', 'phone'];
+            const allowedTypes = ['customer', 'message', 'note', 'chat', 'phone'];
             threads = threads.filter((t) => allowedTypes.includes(t.type));
           }
 

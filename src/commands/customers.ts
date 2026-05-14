@@ -98,8 +98,8 @@ export function createCustomersCommand(): Command {
             ...(options.phone && { phones: [{ type: 'work', value: options.phone }] }),
           };
           requireAtLeastOneField(data, 'Customer create');
-          await client.createCustomer(data);
-          outputJson({ message: 'Customer created' });
+          const result = await client.createCustomer(data);
+          outputJson({ message: 'Customer created', id: result.id });
         }
       )
     );

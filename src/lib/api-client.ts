@@ -463,8 +463,8 @@ export class HelpScoutClient {
     lastName?: string;
     emails?: Array<{ type: string; value: string }>;
     phones?: Array<{ type: string; value: string }>;
-  }) {
-    await this.request<void>('POST', '/customers', { body: data });
+  }): Promise<{ id: number; url: string }> {
+    return this.requestForCreation('/customers', data);
   }
 
   async updateCustomer(
