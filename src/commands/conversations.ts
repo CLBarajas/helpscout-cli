@@ -391,7 +391,7 @@ export function createConversationsCommand(): Command {
             draft: options.draft,
             status: options.status,
           });
-          outputJson({ message: 'Reply sent' });
+          outputJson({ message: options.draft ? 'Draft saved' : 'Reply sent' });
         }
       )
     );
