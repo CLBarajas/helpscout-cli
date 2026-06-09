@@ -257,6 +257,42 @@ export class HelpScoutClient {
     return this.request<Conversation>('GET', `/conversations/${conversationId}`, { params });
   }
 
+  /**
+   * Resolve a conversation reference to its internal API id.
+   *
+   * Help Scout exposes two identifiers: the internal `id`, which the detail
+   * endpoint requires, and the visible ticket `number` (e.g. #12345) shown in
+   * the UI and notifications. A "#"-prefixed value is treated as a ticket
+   * number and resolved via search; anything else is parsed as an internal id
+   * directly.
+   */
+  async resolveConversationId(ref: string | number): Promise<number> {
+    const value = String(ref).trim();
+
+    if (value.startsWith('#')) {
+      const digits = value.slice(1);
+      const number = /^\d+$/.test(digits) ? parseInt(digits, 10) : NaN;
+      if (isNaN(number) || number <= 0) {
+        throw new HelpScoutCliError(`Invalid conversation number: "${ref}"`, 400);
+      }
+      const { conversations } = await this.listConversations({
+        query: `number:${number}`,
+        status: 'all',
+      });
+      const match = conversations.find((c) => c.number === number);
+      if (!match) {
+        throw new HelpScoutCliError(`No conversation found with number #${number}`, 404);
+      }
+      return match.id;
+    }
+
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      throw new HelpScoutCliError(`Invalid conversation ID: "${ref}"`, 400);
+    }
+    return parsed;
+  }
+
   async getConversationThreads(conversationId: number) {
     const response = await this.request<PaginatedResponse<{ threads: Thread[] }>>(
       'GET',

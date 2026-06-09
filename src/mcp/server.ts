@@ -286,8 +286,10 @@ const conversationSchema = z.object({
 const threadSchema = z.object({
   id: z.number().optional(),
   type: z.string(),
-  status: z.string(),
-  state: z.string(),
+  // Not present on every thread type (e.g. lineitem and other system-generated
+  // threads omit them), so these are optional rather than required.
+  status: z.string().optional(),
+  state: z.string().optional(),
   action: z.object({
     type: z.string(),
     text: z.string().optional(),
@@ -391,6 +393,15 @@ const searchConversationsOutputSchema = z.object({
   returned: z.number().optional(),
   omitted: z.number().optional(),
 });
+
+/**
+ * Accepts either an internal conversation id or a visible ticket number
+ * prefixed with "#" (e.g. "#12345"). Resolved to an internal id via
+ * client.resolveConversationId() before use.
+ */
+const conversationRefSchema = z
+  .union([z.number().int().positive(), z.string().min(1)])
+  .describe('Conversation ID (internal numeric id), or visible ticket number prefixed with "#" (e.g. "#12345")');
 
 const searchByCustomerOutputSchema = searchConversationsOutputSchema.extend({
   meta: z.object({
@@ -682,14 +693,15 @@ server.registerTool(
     title: 'Get Conversation',
     description: 'Get detailed information about a specific conversation. When includeThreads is true, the result includes capped threads as a separate array.',
     inputSchema: {
-      conversationId: z.number().describe('Conversation ID'),
+      conversationId: conversationRefSchema,
       includeThreads: z.boolean().optional().describe('Include conversation threads'),
       maxThreads: z.number().optional().default(DEFAULT_MAX_THREADS).describe('Maximum threads to return (default 20). Keeps original message + most recent.'),
     },
     outputSchema: conversationDetailOutputSchema,
     annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
-  async ({ conversationId, includeThreads = false, maxThreads }) => {
+  async ({ conversationId: conversationRef, includeThreads = false, maxThreads }) => {
+    const conversationId = await client.resolveConversationId(conversationRef);
     const detail = await getConversationDetail(conversationId, includeThreads, maxThreads);
 
     return structuredJsonResult(detail, [
@@ -881,7 +893,7 @@ server.registerTool(
     title: 'Create Note',
     description: 'Add a private note to a conversation',
     inputSchema: {
-      conversationId: z.number().describe('Conversation ID'),
+      conversationId: conversationRefSchema,
       text: z.string().describe('Note text content'),
       status: z
         .string()
@@ -891,7 +903,8 @@ server.registerTool(
     outputSchema: noteOutputSchema,
     annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
-  async ({ conversationId, text, status }) => {
+  async ({ conversationId: conversationRef, text, status }) => {
+    const conversationId = await client.resolveConversationId(conversationRef);
     const normalizedStatus = status ? normalizeConversationStatus(status) : undefined;
     await client.createNote(conversationId, { text, status: normalizedStatus });
     return structuredJsonResult({
@@ -909,13 +922,14 @@ server.registerTool(
     title: 'Create Draft Reply',
     description: 'Create a draft reply on an existing conversation (saves without sending). Use this when responding to an existing ticket — the draft is reviewed and sent from the Help Scout UI. For starting a brand-new outbound conversation, use create_draft_conversation instead.',
     inputSchema: {
-      conversationId: z.number().describe('Existing conversation ID to attach the draft reply to'),
+      conversationId: conversationRefSchema,
       text: z.string().describe('Draft reply text content (HTML or plain text)'),
     },
     outputSchema: conversationActionOutputSchema,
     annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
-  async ({ conversationId, text }) => {
+  async ({ conversationId: conversationRef, text }) => {
+    const conversationId = await client.resolveConversationId(conversationRef);
     await client.createDraftReply(conversationId, { text });
     return structuredJsonResult({ success: true, conversationId });
   },
@@ -960,7 +974,7 @@ server.registerTool(
     title: 'Update Conversation Status',
     description: 'Change the status of an existing conversation. Accepts active, open, pending, closed, or spam; open is normalized to active.',
     inputSchema: {
-      conversationId: z.number().describe('Conversation ID'),
+      conversationId: conversationRefSchema,
       status: z
         .enum(['active', 'open', 'pending', 'closed', 'spam'])
         .describe('New conversation status. "open" is treated as "active".'),
@@ -968,7 +982,8 @@ server.registerTool(
     outputSchema: conversationStatusOutputSchema,
     annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
-  async ({ conversationId, status }) => {
+  async ({ conversationId: conversationRef, status }) => {
+    const conversationId = await client.resolveConversationId(conversationRef);
     const normalizedStatus = normalizeConversationStatus(status);
     await client.updateConversationStatus(conversationId, normalizedStatus);
     return structuredJsonResult({ success: true, conversationId, status: normalizedStatus });
@@ -982,13 +997,14 @@ server.registerTool(
     title: 'Add Tag',
     description: 'Add a tag to a conversation',
     inputSchema: {
-      conversationId: z.number().describe('Conversation ID'),
+      conversationId: conversationRefSchema,
       tag: z.string().describe('Tag name to add'),
     },
     outputSchema: taggedConversationOutputSchema,
     annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
-  async ({ conversationId, tag }) => {
+  async ({ conversationId: conversationRef, tag }) => {
+    const conversationId = await client.resolveConversationId(conversationRef);
     await client.addConversationTag(conversationId, tag);
     return structuredJsonResult({ success: true, conversationId, tag });
   },
