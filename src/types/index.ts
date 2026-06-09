@@ -77,8 +77,8 @@ export interface Conversation {
 export interface Thread {
   id: number;
   type: string;
-  status: string;
-  state: string;
+  status?: string;
+  state?: string;
   action?: {
     type: string;
     text?: string;
