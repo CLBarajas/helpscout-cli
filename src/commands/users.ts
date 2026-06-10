@@ -9,16 +9,24 @@ export function createUsersCommand(): Command {
   cmd
     .command('list')
     .description('List users')
+    .option('--email <email>', 'Exact-match email filter')
     .option('-m, --mailbox <id>', 'Filter by mailbox ID')
     .option('--page <number>', 'Page number')
     .action(
-      withErrorHandling(async (options: { mailbox?: string; page?: string }) => {
-        const result = await client.listUsers({
-          mailbox: options.mailbox ? parseInt(options.mailbox, 10) : undefined,
-          page: options.page ? parseInt(options.page, 10) : undefined,
-        });
-        outputJson(result);
-      })
+      withErrorHandling(
+        async (options: {
+          email?: string;
+          mailbox?: string;
+          page?: string;
+        }) => {
+          const result = await client.listUsers({
+            email: options.email,
+            mailbox: options.mailbox ? parseIdArg(options.mailbox, 'mailbox') : undefined,
+            page: options.page ? parseInt(options.page, 10) : undefined,
+          });
+          outputJson(result);
+        }
+      )
     );
 
   cmd

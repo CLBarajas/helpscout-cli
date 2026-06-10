@@ -22,13 +22,16 @@ export interface PageInfo {
   number: number;
 }
 
+export type ConversationStatus = 'active' | 'pending' | 'closed' | 'spam';
+export type DraftConversationStatus = Exclude<ConversationStatus, 'spam'>;
+
 export interface Conversation {
   id: number;
   number: number;
   threads: number;
   type: string;
   folderId: number;
-  status: string;
+  status: ConversationStatus;
   state: string;
   subject: string;
   preview: string;
@@ -74,8 +77,8 @@ export interface Conversation {
 export interface Thread {
   id: number;
   type: string;
-  status: string;
-  state: string;
+  status?: string;
+  state?: string;
   action?: {
     type: string;
     text?: string;
@@ -192,6 +195,24 @@ export interface CustomerAddress {
   postalCode?: string;
   country?: string;
   lines?: string[];
+}
+
+export interface User {
+  id: number;
+  firstName?: string;
+  lastName?: string;
+  email?: string;
+  role?: string;
+  timezone?: string;
+  photoUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  type?: string;
+  mention?: string;
+  initials?: string;
+  jobTitle?: string;
+  phone?: string;
+  alternateEmails?: string[];
 }
 
 export interface Tag {

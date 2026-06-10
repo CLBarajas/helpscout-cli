@@ -8,7 +8,8 @@ import { HelpScoutCliError } from '../lib/errors.js';
 import { outputJson, htmlToPlainText, buildName } from '../lib/output.js';
 import { withErrorHandling, requireConfirmation, parseIdArg } from '../lib/command-utils.js';
 import { buildDateQuery } from '../lib/dates.js';
-import type { Conversation, Thread } from '../types/index.js';
+import { normalizeConversationStatus } from '../lib/conversation-status.js';
+import type { Conversation, DraftConversationStatus, Thread } from '../types/index.js';
 
 interface ParticipantInfo {
   name?: string;
@@ -209,10 +210,10 @@ export function createConversationsCommand(): Command {
   cmd
     .command('view')
     .description('View a conversation')
-    .argument('<id>', 'Conversation ID')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
     .action(
       withErrorHandling(async (id: string) => {
-        const conversation = await client.getConversation(parseIdArg(id, 'conversation'), 'threads');
+        const conversation = await client.getConversation(await client.resolveConversationId(id), 'threads');
         const threadInfo = extractThreadInfo(conversation._embedded?.threads);
         const result = {
           ...conversation,
@@ -225,8 +226,9 @@ export function createConversationsCommand(): Command {
 
   cmd
     .command('threads')
-    .description('List threads for a conversation (customer, agent, note, chat, phone by default)')
-    .argument('<id>', 'Conversation ID')
+    .description('List threads for a conversation (defaults to email communications only)')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
+    .option('--include-notes', 'Include internal notes')
     .option('--all', 'Show all thread types including lineitems, workflows, etc.')
     .option(
       '-t, --type <types>',
@@ -237,15 +239,17 @@ export function createConversationsCommand(): Command {
       withErrorHandling(
         async (
           id: string,
-          options: { all?: boolean; type?: string; html?: boolean }
+          options: { includeNotes?: boolean; all?: boolean; type?: string; html?: boolean }
         ) => {
-          let threads = await client.getConversationThreads(parseIdArg(id, 'conversation'));
+          let threads = await client.getConversationThreads(await client.resolveConversationId(id));
 
           if (options.type) {
             const types = options.type.split(',').map((t) => t.trim().toLowerCase());
             threads = threads.filter((t) => types.includes(t.type));
           } else if (!options.all) {
-            const allowedTypes = ['customer', 'message', 'note', 'chat', 'phone'];
+            const allowedTypes = options.includeNotes
+              ? ['customer', 'message', 'note', 'chat', 'phone']
+              : ['customer', 'message', 'chat', 'phone'];
             threads = threads.filter((t) => allowedTypes.includes(t.type));
           }
 
@@ -257,12 +261,12 @@ export function createConversationsCommand(): Command {
   cmd
     .command('delete')
     .description('Delete a conversation')
-    .argument('<id>', 'Conversation ID')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
     .option('-y, --yes', 'Skip confirmation')
     .action(
       withErrorHandling(async (id: string, options: { yes?: boolean }) => {
         requireConfirmation('conversation', options.yes);
-        await client.deleteConversation(parseIdArg(id, 'conversation'));
+        await client.deleteConversation(await client.resolveConversationId(id));
         outputJson({ message: 'Conversation deleted' });
       })
     );
@@ -335,13 +339,26 @@ export function createConversationsCommand(): Command {
     );
 
   cmd
+    .command('status')
+    .description('Update a conversation status')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
+    .argument('<status>', 'New status (active, open, pending, closed, spam)')
+    .action(
+      withErrorHandling(async (id: string, status: string) => {
+        const normalizedStatus = normalizeConversationStatus(status);
+        await client.updateConversationStatus(await client.resolveConversationId(id), normalizedStatus);
+        outputJson({ message: 'Conversation status updated', status: normalizedStatus });
+      })
+    );
+
+  cmd
     .command('add-tag')
     .description('Add a tag to a conversation')
-    .argument('<id>', 'Conversation ID')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
     .argument('<tag>', 'Tag name')
     .action(
       withErrorHandling(async (id: string, tag: string) => {
-        await client.addConversationTag(parseIdArg(id, 'conversation'), tag);
+        await client.addConversationTag(await client.resolveConversationId(id), tag);
         outputJson({ message: `Tag "${tag}" added` });
       })
     );
@@ -349,23 +366,21 @@ export function createConversationsCommand(): Command {
   cmd
     .command('remove-tag')
     .description('Remove a tag from a conversation')
-    .argument('<id>', 'Conversation ID')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
     .argument('<tag>', 'Tag name')
     .action(
       withErrorHandling(async (id: string, tag: string) => {
-        await client.removeConversationTag(parseIdArg(id, 'conversation'), tag);
+        await client.removeConversationTag(await client.resolveConversationId(id), tag);
         outputJson({ message: `Tag "${tag}" removed` });
       })
     );
 
   cmd
-    .command('reply')
-    .description('Reply to a conversation')
-    .argument('<id>', 'Conversation ID')
+    .command('draft-reply')
+    .description('Create a draft reply on an existing conversation (never sends — review and send from the Help Scout UI)')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
     .requiredOption('--text <text>', 'Reply text')
-    .option('--user <id>', 'User ID sending the reply')
-    .option('--draft', 'Save as draft')
-    .option('--status <status>', 'Set conversation status after reply (active, closed, pending)')
+    .option('--user <id>', 'User ID authoring the draft')
     .action(
       withErrorHandling(
         async (
@@ -373,25 +388,51 @@ export function createConversationsCommand(): Command {
           options: {
             text: string;
             user?: string;
-            draft?: boolean;
-            status?: string;
           }
         ) => {
-          const conversationId = parseIdArg(id, 'conversation');
-          // Fetch conversation to get primary customer ID (required by Help Scout API)
-          const conversation = await client.getConversation(conversationId);
-          const customerId = conversation.primaryCustomer?.id;
-          if (!customerId) {
-            throw new Error('Could not determine customer ID from conversation');
-          }
-          await client.createReply(conversationId, {
+          await client.createDraftReply(await client.resolveConversationId(id), {
             text: options.text,
-            customer: customerId,
             user: options.user ? parseIdArg(options.user, 'user') : undefined,
-            draft: options.draft,
-            status: options.status,
           });
-          outputJson({ message: options.draft ? 'Draft saved' : 'Reply sent' });
+          outputJson({ message: 'Draft reply created' });
+        }
+      )
+    );
+
+  cmd
+    .command('draft-conversation')
+    .description('Create a new outbound draft conversation (never sends — review and send from the Help Scout UI)')
+    .requiredOption('--mailbox <id>', 'Mailbox ID to create the conversation in')
+    .requiredOption('--customer-email <email>', 'Recipient customer email address')
+    .requiredOption('--subject <subject>', 'Conversation subject')
+    .requiredOption('--text <text>', 'Draft message body')
+    .option('--user <id>', 'User ID authoring the draft')
+    .option('--type <type>', 'Conversation type: email, chat, or phone (default email)')
+    .option('--status <status>', 'Conversation status: active, pending, or closed (default active)')
+    .option('--tag <tag...>', 'Tag to apply (repeatable)')
+    .action(
+      withErrorHandling(
+        async (options: {
+          mailbox: string;
+          customerEmail: string;
+          subject: string;
+          text: string;
+          user?: string;
+          type?: 'email' | 'chat' | 'phone';
+          status?: DraftConversationStatus;
+          tag?: string[];
+        }) => {
+          const result = await client.createDraftConversation({
+            mailboxId: parseIdArg(options.mailbox, 'mailbox'),
+            customerEmail: options.customerEmail,
+            subject: options.subject,
+            text: options.text,
+            user: options.user ? parseIdArg(options.user, 'user') : undefined,
+            type: options.type,
+            status: options.status,
+            tags: options.tag,
+          });
+          outputJson({ message: 'Draft conversation created', conversationId: result.id });
         }
       )
     );
@@ -399,10 +440,10 @@ export function createConversationsCommand(): Command {
   cmd
     .command('note')
     .description('Add a note to a conversation')
-    .argument('<id>', 'Conversation ID')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
     .requiredOption('--text <text>', 'Note text')
     .option('--user <id>', 'User ID adding the note')
-    .option('--status <status>', 'Set conversation status after note (active, closed, pending)')
+    .option('--status <status>', 'Set conversation status after adding the note (active, open, pending, closed, spam)')
     .action(
       withErrorHandling(
         async (
@@ -413,12 +454,18 @@ export function createConversationsCommand(): Command {
             status?: string;
           }
         ) => {
-          await client.createNote(parseIdArg(id, 'conversation'), {
+          const status = options.status
+            ? normalizeConversationStatus(options.status)
+            : undefined;
+          await client.createNote(await client.resolveConversationId(id), {
             text: options.text,
             user: options.user ? parseIdArg(options.user, 'user') : undefined,
-            status: options.status,
+            status,
           });
-          outputJson({ message: 'Note added' });
+          outputJson({
+            message: 'Note added',
+            ...(status && { status }),
+          });
         }
       )
     );

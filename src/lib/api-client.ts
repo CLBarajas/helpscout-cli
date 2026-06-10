@@ -2,7 +2,9 @@ import { auth } from './auth.js';
 import { HelpScoutCliError, HelpScoutApiError } from './errors.js';
 import type {
   Conversation,
+  ConversationStatus,
   Customer,
+  DraftConversationStatus,
   Tag,
   Workflow,
   Mailbox,
@@ -127,7 +129,7 @@ export class HelpScoutClient {
     return this.refreshAccessToken();
   }
 
-  private async request<T>(
+  private async rawRequest(
     method: string,
     path: string,
     options: {
@@ -136,7 +138,7 @@ export class HelpScoutClient {
       retry?: boolean;
       rateLimitRetry?: boolean;
     } = {}
-  ): Promise<T> {
+  ): Promise<Response> {
     const { params, body, retry = true, rateLimitRetry = true } = options;
 
     const url = new URL(`${API_BASE}${path}`);
@@ -171,7 +173,7 @@ export class HelpScoutClient {
     if (response.status === 401 && retry) {
       this.accessToken = null;
       await this.refreshAccessToken();
-      return this.request(method, path, { ...options, retry: false });
+      return this.rawRequest(method, path, { ...options, retry: false });
     }
 
     if (response.status === 429 && rateLimitRetry) {
@@ -181,11 +183,7 @@ export class HelpScoutClient {
         JSON.stringify({ warning: `Rate limited. Waiting ${waitSeconds}s before retry...` })
       );
       await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
-      return this.request(method, path, { ...options, rateLimitRetry: false });
-    }
-
-    if (response.status === 204) {
-      return {} as T;
+      return this.rawRequest(method, path, { ...options, rateLimitRetry: false });
     }
 
     if (!response.ok) {
@@ -193,6 +191,23 @@ export class HelpScoutClient {
       throw new HelpScoutApiError('API request failed', error, response.status);
     }
 
+    return response;
+  }
+
+  private async request<T>(
+    method: string,
+    path: string,
+    options: {
+      params?: Record<string, string | number | boolean | undefined>;
+      body?: unknown;
+      retry?: boolean;
+      rateLimitRetry?: boolean;
+    } = {}
+  ): Promise<T> {
+    const response = await this.rawRequest(method, path, options);
+    if (response.status === 204) {
+      return {} as T;
+    }
     return response.json() as Promise<T>;
   }
 
@@ -284,7 +299,8 @@ export class HelpScoutClient {
       assignedTo?: string;
       query?: string;
       embed?: string;
-    } = {}
+    } = {},
+    maxResults?: number,
   ): Promise<Conversation[]> {
     const allConversations: Conversation[] = [];
     let page = 1;
@@ -293,6 +309,9 @@ export class HelpScoutClient {
     do {
       const result = await this.listConversations({ ...params, page });
       allConversations.push(...result.conversations);
+      if (maxResults && allConversations.length >= maxResults) {
+        return allConversations.slice(0, maxResults);
+      }
       totalPages = result.page.totalPages;
       page++;
     } while (page <= totalPages);
@@ -303,6 +322,42 @@ export class HelpScoutClient {
   async getConversation(conversationId: number, embed?: string) {
     const params = embed ? { embed } : undefined;
     return this.request<Conversation>('GET', `/conversations/${conversationId}`, { params });
+  }
+
+  /**
+   * Resolve a conversation reference to its internal API id.
+   *
+   * Help Scout exposes two identifiers: the internal `id`, which the detail
+   * endpoint requires, and the visible ticket `number` (e.g. #12345) shown in
+   * the UI and notifications. A "#"-prefixed value is treated as a ticket
+   * number and resolved via search; anything else is parsed as an internal id
+   * directly.
+   */
+  async resolveConversationId(ref: string | number): Promise<number> {
+    const value = String(ref).trim();
+
+    if (value.startsWith('#')) {
+      const digits = value.slice(1);
+      const number = /^\d+$/.test(digits) ? parseInt(digits, 10) : NaN;
+      if (isNaN(number) || number <= 0) {
+        throw new HelpScoutCliError(`Invalid conversation number: "${ref}"`, 400);
+      }
+      const { conversations } = await this.listConversations({
+        query: `number:${number}`,
+        status: 'all',
+      });
+      const match = conversations.find((c) => c.number === number);
+      if (!match) {
+        throw new HelpScoutCliError(`No conversation found with number #${number}`, 404);
+      }
+      return match.id;
+    }
+
+    const parsed = parseInt(value, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      throw new HelpScoutCliError(`Invalid conversation ID: "${ref}"`, 400);
+    }
+    return parsed;
   }
 
   async getConversationThreads(conversationId: number) {
@@ -322,6 +377,10 @@ export class HelpScoutClient {
     for (const operation of operations) {
       await this.request<void>('PATCH', `/conversations/${conversationId}`, { body: operation });
     }
+  }
+
+  async updateConversationStatus(conversationId: number, status: ConversationStatus) {
+    await this.updateConversation(conversationId, [{ op: 'replace', path: '/status', value: status }]);
   }
 
   async deleteConversation(conversationId: number) {
@@ -390,6 +449,18 @@ export class HelpScoutClient {
     });
   }
 
+  async createDraftReply(
+    conversationId: number,
+    data: {
+      text: string;
+      user?: number;
+    }
+  ) {
+    await this.request<void>('POST', `/conversations/${conversationId}/reply`, {
+      body: { ...data, draft: true },
+    });
+  }
+
   async createReply(
     conversationId: number,
     data: {
@@ -408,12 +479,54 @@ export class HelpScoutClient {
     await this.request<void>('POST', `/conversations/${conversationId}/reply`, { body });
   }
 
+  async createDraftConversation(data: {
+    subject: string;
+    mailboxId: number;
+    customerEmail: string;
+    text: string;
+    type?: 'email' | 'chat' | 'phone';
+    status?: DraftConversationStatus;
+    user?: number;
+    tags?: string[];
+  }): Promise<{ id: number }> {
+    const { subject, mailboxId, customerEmail, text, type = 'email', status = 'active', user, tags } = data;
+    const response = await this.rawRequest('POST', '/conversations', {
+      body: {
+        subject,
+        mailboxId,
+        type,
+        status,
+        customer: { email: customerEmail },
+        threads: [
+          {
+            type: 'reply',
+            customer: { email: customerEmail },
+            text,
+            draft: true,
+            ...(user !== undefined && { user }),
+          },
+        ],
+        ...(tags && { tags }),
+      },
+    });
+
+    const location = response.headers.get('Location') || '';
+    const match = location.match(/\/conversations\/(\d+)/);
+    if (!match) {
+      throw new HelpScoutCliError(
+        'Draft conversation created but could not parse ID from Location header',
+        0,
+      );
+    }
+    return { id: parseInt(match[1], 10) };
+  }
+
   async createNote(
     conversationId: number,
     data: {
       text: string;
       user?: number;
-      status?: string;
+      status?: ConversationStatus;
     }
   ) {
     await this.request<void>('POST', `/conversations/${conversationId}/notes`, { body: data });
@@ -597,7 +710,7 @@ export class HelpScoutClient {
   }
 
 // Users
-  async listUsers(params: { mailbox?: number; page?: number } = {}) {
+  async listUsers(params: { email?: string; mailbox?: number; page?: number } = {}) {
     const response = await this.request<
       PaginatedResponse<{
         users: Array<{
@@ -608,9 +721,10 @@ export class HelpScoutClient {
           role: string;
           timezone: string;
           photoUrl?: string;
+          mention?: string;
         }>;
       }>
-    >('GET', '/users', { params: { mailbox: params.mailbox, page: params.page } });
+    >('GET', '/users', { params: { email: params.email, mailbox: params.mailbox, page: params.page } });
     return {
       users: response._embedded?.users || [],
       page: response.page,

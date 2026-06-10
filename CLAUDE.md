@@ -94,7 +94,7 @@ Base URL: `https://api.helpscout.net/v2`
 - Returns 429 when exceeded
 
 ### Key Endpoints Used
-- `/conversations` - List, view, delete conversations; manage threads, tags, custom fields
+- `/conversations` - List, view, update, delete conversations; manage status, threads, tags, custom fields
 - `/customers` - CRUD operations on customers, emails, phones
 - `/tags` - List and view tags
 - `/workflows` - List, run manual workflows, activate/deactivate
