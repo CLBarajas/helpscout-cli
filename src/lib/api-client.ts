@@ -39,17 +39,28 @@ interface PaginatedResponse<T> {
   page: PageInfo;
 }
 
+interface AuthProvider {
+  getAccessToken(): Promise<string | null>;
+  setAccessToken(token: string): Promise<boolean>;
+  getRefreshToken(): Promise<string | null>;
+  setRefreshToken(token: string): Promise<boolean>;
+  getAppId(): Promise<string | null>;
+  getAppSecret(): Promise<string | null>;
+}
+
 export class HelpScoutClient {
   private accessToken: string | null = null;
+
+  constructor(private readonly authManager: AuthProvider = auth) {}
 
   clearToken(): void {
     this.accessToken = null;
   }
 
   async refreshAccessToken(): Promise<string> {
-    const appId = await auth.getAppId();
-    const appSecret = await auth.getAppSecret();
-    const refreshToken = await auth.getRefreshToken();
+    const appId = await this.authManager.getAppId();
+    const appSecret = await this.authManager.getAppSecret();
+    const refreshToken = await this.authManager.getRefreshToken();
 
     if (!appId || !appSecret) {
       throw new HelpScoutCliError('Not configured. Please run: helpscout auth login', 401);
@@ -70,9 +81,9 @@ export class HelpScoutClient {
 
         if (response.ok) {
           const data = (await response.json()) as TokenResponse;
-          await auth.setAccessToken(data.access_token);
+          await this.authManager.setAccessToken(data.access_token);
           if (data.refresh_token) {
-            await auth.setRefreshToken(data.refresh_token);
+            await this.authManager.setRefreshToken(data.refresh_token);
           }
           this.accessToken = data.access_token;
           return data.access_token;
@@ -110,7 +121,7 @@ export class HelpScoutClient {
     }
 
     const data = (await response.json()) as TokenResponse;
-    await auth.setAccessToken(data.access_token);
+    await this.authManager.setAccessToken(data.access_token);
     this.accessToken = data.access_token;
     return data.access_token;
   }
@@ -120,7 +131,7 @@ export class HelpScoutClient {
       return this.accessToken;
     }
 
-    const storedToken = await auth.getAccessToken();
+    const storedToken = await this.authManager.getAccessToken();
     if (storedToken) {
       this.accessToken = storedToken;
       return storedToken;
@@ -208,7 +219,13 @@ export class HelpScoutClient {
     if (response.status === 204) {
       return {} as T;
     }
-    return response.json() as Promise<T>;
+
+    const text = await response.text();
+    if (!text) {
+      return {} as T;
+    }
+
+    return JSON.parse(text) as T;
   }
 
   private async requestForCreation(
@@ -300,7 +317,7 @@ export class HelpScoutClient {
       query?: string;
       embed?: string;
     } = {},
-    maxResults?: number,
+    maxResults?: number
   ): Promise<Conversation[]> {
     const allConversations: Conversation[] = [];
     let page = 1;
@@ -360,12 +377,28 @@ export class HelpScoutClient {
     return parsed;
   }
 
-  async getConversationThreads(conversationId: number) {
-    const response = await this.request<PaginatedResponse<{ threads: Thread[] }>>(
-      'GET',
-      `/conversations/${conversationId}/threads`
-    );
-    return response._embedded?.threads || [];
+  async getConversationThreads(conversationId: number, maxResults?: number) {
+    const threads: Thread[] = [];
+    let page = 1;
+    let totalPages = 1;
+
+    do {
+      const response = await this.request<PaginatedResponse<{ threads: Thread[] }>>(
+        'GET',
+        `/conversations/${conversationId}/threads`,
+        { params: { page } }
+      );
+
+      threads.push(...(response._embedded?.threads || []));
+      if (maxResults && threads.length >= maxResults) {
+        return threads.slice(0, maxResults);
+      }
+
+      totalPages = response.page.totalPages;
+      page++;
+    } while (page <= totalPages);
+
+    return threads;
   }
 
   async updateConversation(
@@ -489,7 +522,16 @@ export class HelpScoutClient {
     user?: number;
     tags?: string[];
   }): Promise<{ id: number }> {
-    const { subject, mailboxId, customerEmail, text, type = 'email', status = 'active', user, tags } = data;
+    const {
+      subject,
+      mailboxId,
+      customerEmail,
+      text,
+      type = 'email',
+      status = 'active',
+      user,
+      tags,
+    } = data;
     const response = await this.rawRequest('POST', '/conversations', {
       body: {
         subject,
@@ -515,7 +557,7 @@ export class HelpScoutClient {
     if (!match) {
       throw new HelpScoutCliError(
         'Draft conversation created but could not parse ID from Location header',
-        0,
+        0
       );
     }
     return { id: parseInt(match[1], 10) };
@@ -662,13 +704,7 @@ export class HelpScoutClient {
   }
 
   // Workflows
-  async listWorkflows(
-    params: {
-      mailbox?: number;
-      type?: string;
-      page?: number;
-    } = {}
-  ) {
+  async listWorkflows(params: { mailbox?: number; type?: string; page?: number } = {}) {
     const response = await this.request<PaginatedResponse<{ workflows: Workflow[] }>>(
       'GET',
       '/workflows',
