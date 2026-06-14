@@ -348,6 +348,7 @@ const customerSchema = z
     photoType: z.string().optional(),
     background: z.string().optional(),
     age: z.string().optional(),
+    conversationCount: z.number().optional(),
     createdAt: z.string(),
     updatedAt: z.string().optional(),
     emails: z

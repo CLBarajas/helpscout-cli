@@ -149,6 +149,9 @@ export interface Customer {
   photoUrl?: string;
   background?: string;
   age?: string;
+  // Total conversations associated with this customer. Returned by the v2
+  // Get/List Customers endpoints since 2025-11-26.
+  conversationCount?: number;
   createdAt: string;
   updatedAt?: string;
   emails?: CustomerEmail[];

@@ -86,6 +86,17 @@ describe('HelpScoutClient', () => {
     );
   });
 
+  it('preserves conversationCount on getCustomer', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ id: 42, createdAt: '2026-01-01T00:00:00Z', conversationCount: 10 })
+    );
+
+    const customer = await client.getCustomer(42);
+
+    expect(customer.conversationCount).toBe(10);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v2/customers/42');
+  });
+
   it('sends private notes with optional status', async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 201 }));
 
