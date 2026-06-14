@@ -1,7 +1,36 @@
 # registerTool Migration — Implementation Plan
 
-**Drafted:** 2026-06-12 · **Status:** SPEC — not started
+**Drafted:** 2026-06-12 · **Status:** ✅ DONE 2026-06-14 (see "Outcome" below)
 **Size:** Large but mechanical; batch-by-batch with gates between batches
+
+## Outcome (2026-06-14)
+
+All 41 legacy `server.tool()` registrations migrated to the upstream
+`rememberTool()` + `server.registerTool()` idiom. Zero `server.tool()` call
+sites remain; 62 tools served, 62 `rememberTool` entries — full registry parity.
+
+- **Defect #2 fixed (the live one):** `search_tools` now sees all 62 tools (was
+  22). Verified via stdio smoke (`tools/call search_tools` returns fork tools).
+- **Defect #1 fixed:** no more two-idiom rub on upstream merges.
+- **Defect #3 (partial):** `annotations` added to every fork tool — read-only
+  fetchers `READ_ONLY_REMOTE_ANNOTATIONS`, writers `MUTATING_REMOTE_ANNOTATIONS`,
+  and a **new `DESTRUCTIVE_REMOTE_ANNOTATIONS`** (`destructiveHint:true`) on the
+  6 `delete_*` tools. **Deferred (intentional follow-up):** `outputSchema` /
+  structured content on the migrated tools — handlers still return `jsonResponse`
+  (`textJsonResult`). Several have `{error}` branches that would break output
+  validation, so per the spec ("only where cheap") this is left for a later pass.
+- **Parity lock:** `src/mcp/server.test.ts` now asserts every served tool has a
+  `rememberTool` entry (and vice-versa) via the new `getServerToolNamesForTesting()`
+  helper, which reads the SDK's `_registeredTools`. This locks the 22-vs-62 defect
+  out permanently.
+- **Audits:** no `.color` readers in `src/` (TagStyle deprecation is a no-op for
+  us); `search_conversations` and its caps were untouched (already registerTool),
+  so the Dev CLAUDE.md "fetch ALL pages → jq-filter by assignee" workflow is
+  unaffected.
+- **Gates:** typecheck clean, lint 0, 43 tests pass (was 42), `bun run build` +
+  `bun link` OK. **Not committed/pushed** (awaiting Chris).
+- **Remaining aftercare:** Dev CLAUDE.md MCP-tool table sweep (annotations/search
+  coverage note) — left for Chris since it's a global-instructions file.
 **Motivation (three concrete defects/costs):**
 1. **Merge tax:** upstream's `server.ts` is now 100% `registerTool`; the fork's 41 added tools
    still use legacy `server.tool()`. All 5 conflict hunks in the 6/12 v2.16.0 merge (`bea4efd`)

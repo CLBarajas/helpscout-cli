@@ -592,6 +592,13 @@ const MUTATING_REMOTE_ANNOTATIONS = {
   openWorldHint: true,
 };
 
+const DESTRUCTIVE_REMOTE_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: true,
+};
+
 const toolRegistry: Array<{ name: string; description: string }> = [];
 
 type ConversationSummary = JsonObject & {
@@ -628,6 +635,16 @@ function rememberTool(name: string, description: string) {
 
 export function getRegisteredToolsForTesting() {
   return [...toolRegistry];
+}
+
+/**
+ * Names of every tool actually registered on the MCP server (read from the SDK's
+ * internal registry). Used by the parity test that locks the search_tools
+ * discovery defect: every served tool must have a matching rememberTool() entry.
+ */
+export function getServerToolNamesForTesting(): string[] {
+  const internal = server as unknown as { _registeredTools: Record<string, unknown> };
+  return Object.keys(internal._registeredTools);
 }
 
 const dateFilterSchema = {
@@ -1067,22 +1084,44 @@ server.registerTool(
   }
 );
 
-server.tool(
+rememberTool('create_conversation', 'Create a new conversation');
+server.registerTool(
   'create_conversation',
-  'Create a new conversation',
   {
-    subject: z.string().describe('Subject line'),
-    customerEmail: z.string().optional().describe('Customer email (provide this or customerId)'),
-    customerId: z.coerce.number().optional().describe('Customer ID (provide this or customerEmail)'),
-    mailboxId: z.coerce.number().describe('Mailbox ID'),
-    text: z.string().describe('Message body'),
-    status: z.enum(['active', 'closed', 'pending']).optional().describe('Conversation status (default: active)'),
-    draft: z.boolean().optional().describe('Save as draft without sending'),
-    user: z.coerce.number().optional().describe('User ID sending the message'),
-    assignTo: z.coerce.number().optional().describe('Assign to user ID'),
-    tags: z.array(z.string()).optional().describe('Tag names to apply'),
+    title: 'Create Conversation',
+    description: 'Create a new conversation',
+    inputSchema: {
+      subject: z.string().describe('Subject line'),
+      customerEmail: z.string().optional().describe('Customer email (provide this or customerId)'),
+      customerId: z.coerce
+        .number()
+        .optional()
+        .describe('Customer ID (provide this or customerEmail)'),
+      mailboxId: z.coerce.number().describe('Mailbox ID'),
+      text: z.string().describe('Message body'),
+      status: z
+        .enum(['active', 'closed', 'pending'])
+        .optional()
+        .describe('Conversation status (default: active)'),
+      draft: z.boolean().optional().describe('Save as draft without sending'),
+      user: z.coerce.number().optional().describe('User ID sending the message'),
+      assignTo: z.coerce.number().optional().describe('Assign to user ID'),
+      tags: z.array(z.string()).optional().describe('Tag names to apply'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
-  async ({ subject, customerEmail, customerId, mailboxId, text, status, draft, user, assignTo, tags }) => {
+  async ({
+    subject,
+    customerEmail,
+    customerId,
+    mailboxId,
+    text,
+    status,
+    draft,
+    user,
+    assignTo,
+    tags,
+  }) => {
     if (customerEmail && customerId) {
       return jsonResponse({ error: 'Provide customerEmail or customerId, not both' });
     }
@@ -1146,10 +1185,15 @@ server.registerTool(
   async ({ mailboxId }) => structuredJsonResult(cleanMailbox(await client.getMailbox(mailboxId)))
 );
 
-server.tool(
+rememberTool('list_mailbox_fields', 'List custom fields for a mailbox');
+server.registerTool(
   'list_mailbox_fields',
-  'List custom fields for a mailbox',
-  { mailboxId: z.coerce.number().describe('Mailbox ID') },
+  {
+    title: 'List Mailbox Fields',
+    description: 'List custom fields for a mailbox',
+    inputSchema: { mailboxId: z.coerce.number().describe('Mailbox ID') },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
   async ({ mailboxId }) => jsonResponse(await client.listMailboxFields(mailboxId))
 );
 
@@ -1202,14 +1246,19 @@ server.registerTool(
   }
 );
 
-server.tool(
+rememberTool('create_customer', 'Create a new customer');
+server.registerTool(
   'create_customer',
-  'Create a new customer',
   {
-    firstName: z.string().optional().describe('First name'),
-    lastName: z.string().optional().describe('Last name'),
-    email: z.string().optional().describe('Email address'),
-    phone: z.string().optional().describe('Phone number'),
+    title: 'Create Customer',
+    description: 'Create a new customer',
+    inputSchema: {
+      firstName: z.string().optional().describe('First name'),
+      lastName: z.string().optional().describe('Last name'),
+      email: z.string().optional().describe('Email address'),
+      phone: z.string().optional().describe('Phone number'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ firstName, lastName, email, phone }) => {
     const data = {
@@ -1223,17 +1272,22 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('update_customer', 'Update an existing customer');
+server.registerTool(
   'update_customer',
-  'Update an existing customer',
   {
-    customerId: z.coerce.number().describe('Customer ID'),
-    firstName: z.string().optional().describe('First name'),
-    lastName: z.string().optional().describe('Last name'),
-    jobTitle: z.string().optional().describe('Job title'),
-    location: z.string().optional().describe('Location'),
-    organization: z.string().optional().describe('Organization'),
-    background: z.string().optional().describe('Background notes'),
+    title: 'Update Customer',
+    description: 'Update an existing customer',
+    inputSchema: {
+      customerId: z.coerce.number().describe('Customer ID'),
+      firstName: z.string().optional().describe('First name'),
+      lastName: z.string().optional().describe('Last name'),
+      jobTitle: z.string().optional().describe('Job title'),
+      location: z.string().optional().describe('Location'),
+      organization: z.string().optional().describe('Organization'),
+      background: z.string().optional().describe('Background notes'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ customerId, firstName, lastName, jobTitle, location, organization, background }) => {
     const data = {
@@ -1249,10 +1303,15 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('delete_customer', 'Delete a customer');
+server.registerTool(
   'delete_customer',
-  'Delete a customer',
-  { customerId: z.coerce.number().describe('Customer ID') },
+  {
+    title: 'Delete Customer',
+    description: 'Delete a customer',
+    inputSchema: { customerId: z.coerce.number().describe('Customer ID') },
+    annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS,
+  },
   async ({ customerId }) => {
     await client.deleteCustomer(customerId);
     return jsonResponse({ success: true });
@@ -1260,20 +1319,30 @@ server.tool(
 );
 
 // Customer Emails
-server.tool(
+rememberTool('list_customer_emails', 'List emails for a customer');
+server.registerTool(
   'list_customer_emails',
-  'List emails for a customer',
-  { customerId: z.coerce.number().describe('Customer ID') },
+  {
+    title: 'List Customer Emails',
+    description: 'List emails for a customer',
+    inputSchema: { customerId: z.coerce.number().describe('Customer ID') },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
   async ({ customerId }) => jsonResponse(await client.listCustomerEmails(customerId))
 );
 
-server.tool(
+rememberTool('create_customer_email', 'Add an email to a customer');
+server.registerTool(
   'create_customer_email',
-  'Add an email to a customer',
   {
-    customerId: z.coerce.number().describe('Customer ID'),
-    type: z.enum(['home', 'work', 'other']).describe('Email type'),
-    value: z.string().describe('Email address'),
+    title: 'Create Customer Email',
+    description: 'Add an email to a customer',
+    inputSchema: {
+      customerId: z.coerce.number().describe('Customer ID'),
+      type: z.enum(['home', 'work', 'other']).describe('Email type'),
+      value: z.string().describe('Email address'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ customerId, type, value }) => {
     await client.createCustomerEmail(customerId, { type, value });
@@ -1281,14 +1350,19 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('update_customer_email', 'Update a customer email');
+server.registerTool(
   'update_customer_email',
-  'Update a customer email',
   {
-    customerId: z.coerce.number().describe('Customer ID'),
-    emailId: z.coerce.number().describe('Email ID'),
-    type: z.enum(['home', 'work', 'other']).optional().describe('Email type'),
-    value: z.string().optional().describe('Email address'),
+    title: 'Update Customer Email',
+    description: 'Update a customer email',
+    inputSchema: {
+      customerId: z.coerce.number().describe('Customer ID'),
+      emailId: z.coerce.number().describe('Email ID'),
+      type: z.enum(['home', 'work', 'other']).optional().describe('Email type'),
+      value: z.string().optional().describe('Email address'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ customerId, emailId, type, value }) => {
     const data = {
@@ -1300,12 +1374,17 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('delete_customer_email', 'Delete a customer email');
+server.registerTool(
   'delete_customer_email',
-  'Delete a customer email',
   {
-    customerId: z.coerce.number().describe('Customer ID'),
-    emailId: z.coerce.number().describe('Email ID'),
+    title: 'Delete Customer Email',
+    description: 'Delete a customer email',
+    inputSchema: {
+      customerId: z.coerce.number().describe('Customer ID'),
+      emailId: z.coerce.number().describe('Email ID'),
+    },
+    annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS,
   },
   async ({ customerId, emailId }) => {
     await client.deleteCustomerEmail(customerId, emailId);
@@ -1314,20 +1393,30 @@ server.tool(
 );
 
 // Customer Phones
-server.tool(
+rememberTool('list_customer_phones', 'List phones for a customer');
+server.registerTool(
   'list_customer_phones',
-  'List phones for a customer',
-  { customerId: z.coerce.number().describe('Customer ID') },
+  {
+    title: 'List Customer Phones',
+    description: 'List phones for a customer',
+    inputSchema: { customerId: z.coerce.number().describe('Customer ID') },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
   async ({ customerId }) => jsonResponse(await client.listCustomerPhones(customerId))
 );
 
-server.tool(
+rememberTool('create_customer_phone', 'Add a phone to a customer');
+server.registerTool(
   'create_customer_phone',
-  'Add a phone to a customer',
   {
-    customerId: z.coerce.number().describe('Customer ID'),
-    type: z.enum(['home', 'work', 'mobile', 'fax', 'pager', 'other']).describe('Phone type'),
-    value: z.string().describe('Phone number'),
+    title: 'Create Customer Phone',
+    description: 'Add a phone to a customer',
+    inputSchema: {
+      customerId: z.coerce.number().describe('Customer ID'),
+      type: z.enum(['home', 'work', 'mobile', 'fax', 'pager', 'other']).describe('Phone type'),
+      value: z.string().describe('Phone number'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ customerId, type, value }) => {
     await client.createCustomerPhone(customerId, { type, value });
@@ -1335,14 +1424,22 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('update_customer_phone', 'Update a customer phone');
+server.registerTool(
   'update_customer_phone',
-  'Update a customer phone',
   {
-    customerId: z.coerce.number().describe('Customer ID'),
-    phoneId: z.coerce.number().describe('Phone ID'),
-    type: z.enum(['home', 'work', 'mobile', 'fax', 'pager', 'other']).optional().describe('Phone type'),
-    value: z.string().optional().describe('Phone number'),
+    title: 'Update Customer Phone',
+    description: 'Update a customer phone',
+    inputSchema: {
+      customerId: z.coerce.number().describe('Customer ID'),
+      phoneId: z.coerce.number().describe('Phone ID'),
+      type: z
+        .enum(['home', 'work', 'mobile', 'fax', 'pager', 'other'])
+        .optional()
+        .describe('Phone type'),
+      value: z.string().optional().describe('Phone number'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ customerId, phoneId, type, value }) => {
     const data = {
@@ -1354,12 +1451,17 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('delete_customer_phone', 'Delete a customer phone');
+server.registerTool(
   'delete_customer_phone',
-  'Delete a customer phone',
   {
-    customerId: z.coerce.number().describe('Customer ID'),
-    phoneId: z.coerce.number().describe('Phone ID'),
+    title: 'Delete Customer Phone',
+    description: 'Delete a customer phone',
+    inputSchema: {
+      customerId: z.coerce.number().describe('Customer ID'),
+      phoneId: z.coerce.number().describe('Phone ID'),
+    },
+    annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS,
   },
   async ({ customerId, phoneId }) => {
     await client.deleteCustomerPhone(customerId, phoneId);
@@ -1464,34 +1566,49 @@ server.registerTool(
   }
 );
 
-server.tool(
+rememberTool('list_saved_replies', 'List saved replies for a mailbox');
+server.registerTool(
   'list_saved_replies',
-  'List saved replies for a mailbox',
   {
-    mailboxId: z.coerce.number().describe('Mailbox ID'),
-    page: z.coerce.number().optional().describe('Page number'),
+    title: 'List Saved Replies',
+    description: 'List saved replies for a mailbox',
+    inputSchema: {
+      mailboxId: z.coerce.number().describe('Mailbox ID'),
+      page: z.coerce.number().optional().describe('Page number'),
+    },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
   async ({ mailboxId, page }) => jsonResponse(await client.listSavedReplies(mailboxId, page))
 );
 
-server.tool(
+rememberTool('get_saved_reply', 'Get a saved reply with full text');
+server.registerTool(
   'get_saved_reply',
-  'Get a saved reply with full text',
   {
-    mailboxId: z.coerce.number().describe('Mailbox ID'),
-    savedReplyId: z.coerce.number().describe('Saved Reply ID'),
+    title: 'Get Saved Reply',
+    description: 'Get a saved reply with full text',
+    inputSchema: {
+      mailboxId: z.coerce.number().describe('Mailbox ID'),
+      savedReplyId: z.coerce.number().describe('Saved Reply ID'),
+    },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
   async ({ mailboxId, savedReplyId }) =>
     jsonResponse(await client.getSavedReply(mailboxId, savedReplyId))
 );
 
-server.tool(
+rememberTool('create_saved_reply', 'Create a new saved reply');
+server.registerTool(
   'create_saved_reply',
-  'Create a new saved reply',
   {
-    mailboxId: z.coerce.number().describe('Mailbox ID'),
-    name: z.string().describe('Name for the saved reply'),
-    text: z.string().describe('HTML text content of the saved reply'),
+    title: 'Create Saved Reply',
+    description: 'Create a new saved reply',
+    inputSchema: {
+      mailboxId: z.coerce.number().describe('Mailbox ID'),
+      name: z.string().describe('Name for the saved reply'),
+      text: z.string().describe('HTML text content of the saved reply'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ mailboxId, name, text }) => {
     await client.createSavedReply(mailboxId, { name, text });
@@ -1499,14 +1616,19 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('update_saved_reply', 'Update an existing saved reply');
+server.registerTool(
   'update_saved_reply',
-  'Update an existing saved reply',
   {
-    mailboxId: z.coerce.number().describe('Mailbox ID'),
-    savedReplyId: z.coerce.number().describe('Saved Reply ID'),
-    name: z.string().optional().describe('New name for the saved reply'),
-    text: z.string().optional().describe('New HTML text content'),
+    title: 'Update Saved Reply',
+    description: 'Update an existing saved reply',
+    inputSchema: {
+      mailboxId: z.coerce.number().describe('Mailbox ID'),
+      savedReplyId: z.coerce.number().describe('Saved Reply ID'),
+      name: z.string().optional().describe('New name for the saved reply'),
+      text: z.string().optional().describe('New HTML text content'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ mailboxId, savedReplyId, name, text }) => {
     if (!name && !text) {
@@ -1520,12 +1642,17 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('delete_saved_reply', 'Delete a saved reply');
+server.registerTool(
   'delete_saved_reply',
-  'Delete a saved reply',
   {
-    mailboxId: z.coerce.number().describe('Mailbox ID'),
-    savedReplyId: z.coerce.number().describe('Saved Reply ID'),
+    title: 'Delete Saved Reply',
+    description: 'Delete a saved reply',
+    inputSchema: {
+      mailboxId: z.coerce.number().describe('Mailbox ID'),
+      savedReplyId: z.coerce.number().describe('Saved Reply ID'),
+    },
+    annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS,
   },
   async ({ mailboxId, savedReplyId }) => {
     await client.deleteSavedReply(mailboxId, savedReplyId);
@@ -1564,15 +1691,23 @@ server.registerTool(
   }
 );
 
-server.tool(
+rememberTool('create_reply', 'Send a reply to a conversation (visible to customer)');
+server.registerTool(
   'create_reply',
-  'Send a reply to a conversation (visible to customer)',
   {
-    conversationId: z.coerce.number().describe('Conversation ID'),
-    text: z.string().describe('Reply text content'),
-    user: z.coerce.number().optional().describe('User ID sending the reply'),
-    draft: z.boolean().optional().describe('Save as draft instead of sending'),
-    status: z.enum(['active', 'closed', 'pending']).optional().describe('Set conversation status after reply'),
+    title: 'Create Reply',
+    description: 'Send a reply to a conversation (visible to customer)',
+    inputSchema: {
+      conversationId: z.coerce.number().describe('Conversation ID'),
+      text: z.string().describe('Reply text content'),
+      user: z.coerce.number().optional().describe('User ID sending the reply'),
+      draft: z.boolean().optional().describe('Save as draft instead of sending'),
+      status: z
+        .enum(['active', 'closed', 'pending'])
+        .optional()
+        .describe('Set conversation status after reply'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, text, user, draft, status }) => {
     // Fetch conversation to get primary customer ID (required by Help Scout API)
@@ -1696,12 +1831,17 @@ server.registerTool(
   }
 );
 
-server.tool(
+rememberTool('remove_tag', 'Remove a tag from a conversation');
+server.registerTool(
   'remove_tag',
-  'Remove a tag from a conversation',
   {
-    conversationId: z.coerce.number().describe('Conversation ID'),
-    tag: z.string().describe('Tag name to remove'),
+    title: 'Remove Tag',
+    description: 'Remove a tag from a conversation',
+    inputSchema: {
+      conversationId: z.coerce.number().describe('Conversation ID'),
+      tag: z.string().describe('Tag name to remove'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, tag }) => {
     await client.removeConversationTag(conversationId, tag);
@@ -1709,13 +1849,23 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('snooze_conversation', 'Snooze a conversation until a specified date');
+server.registerTool(
   'snooze_conversation',
-  'Snooze a conversation until a specified date',
   {
-    conversationId: z.coerce.number().describe('Conversation ID'),
-    snoozedUntil: z.string().describe('Snooze until date (ISO 8601, e.g., 2026-02-10T09:00:00Z)'),
-    unsnoozeOnCustomerReply: z.boolean().optional().describe('Automatically unsnooze when customer replies'),
+    title: 'Snooze Conversation',
+    description: 'Snooze a conversation until a specified date',
+    inputSchema: {
+      conversationId: z.coerce.number().describe('Conversation ID'),
+      snoozedUntil: z
+        .string()
+        .describe('Snooze until date (ISO 8601, e.g., 2026-02-10T09:00:00Z)'),
+      unsnoozeOnCustomerReply: z
+        .boolean()
+        .optional()
+        .describe('Automatically unsnooze when customer replies'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, snoozedUntil, unsnoozeOnCustomerReply }) => {
     await client.snoozeConversation(conversationId, snoozedUntil, unsnoozeOnCustomerReply);
@@ -1723,11 +1873,16 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('unsnooze_conversation', 'Immediately unsnooze a conversation');
+server.registerTool(
   'unsnooze_conversation',
-  'Immediately unsnooze a conversation',
   {
-    conversationId: z.coerce.number().describe('Conversation ID'),
+    title: 'Unsnooze Conversation',
+    description: 'Immediately unsnooze a conversation',
+    inputSchema: {
+      conversationId: z.coerce.number().describe('Conversation ID'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId }) => {
     await client.unsnoozeConversation(conversationId);
@@ -1735,14 +1890,19 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('update_thread', 'Update a thread (change text or hide/unhide)');
+server.registerTool(
   'update_thread',
-  'Update a thread (change text or hide/unhide)',
   {
-    conversationId: z.coerce.number().describe('Conversation ID'),
-    threadId: z.coerce.number().describe('Thread ID'),
-    text: z.string().optional().describe('New thread text'),
-    hidden: z.boolean().optional().describe('Hide (true) or unhide (false) the thread'),
+    title: 'Update Thread',
+    description: 'Update a thread (change text or hide/unhide)',
+    inputSchema: {
+      conversationId: z.coerce.number().describe('Conversation ID'),
+      threadId: z.coerce.number().describe('Thread ID'),
+      text: z.string().optional().describe('New thread text'),
+      hidden: z.boolean().optional().describe('Hide (true) or unhide (false) the thread'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, threadId, text, hidden }) => {
     if (text === undefined && hidden === undefined) {
@@ -1768,11 +1928,16 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('delete_conversation', 'Delete a conversation');
+server.registerTool(
   'delete_conversation',
-  'Delete a conversation',
   {
-    conversationId: z.coerce.number().describe('Conversation ID'),
+    title: 'Delete Conversation',
+    description: 'Delete a conversation',
+    inputSchema: {
+      conversationId: z.coerce.number().describe('Conversation ID'),
+    },
+    annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId }) => {
     await client.deleteConversation(conversationId);
@@ -1780,22 +1945,27 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('update_conversation', 'Update conversation properties without adding a thread');
+server.registerTool(
   'update_conversation',
-  'Update conversation properties without adding a thread',
   {
-    conversationId: z.coerce.number().describe('Conversation ID'),
-    status: z
-      .enum(['active', 'closed', 'pending', 'spam'])
-      .optional()
-      .describe('Change conversation status'),
-    assignee: z
-      .union([z.coerce.number(), z.literal('none')])
-      .optional()
-      .describe('User ID to assign to, or "none" to unassign'),
-    customer: z.coerce.number().optional().describe('Change primary customer ID'),
-    subject: z.string().optional().describe('Update subject line'),
-    mailbox: z.coerce.number().optional().describe('Move to different mailbox'),
+    title: 'Update Conversation',
+    description: 'Update conversation properties without adding a thread',
+    inputSchema: {
+      conversationId: z.coerce.number().describe('Conversation ID'),
+      status: z
+        .enum(['active', 'closed', 'pending', 'spam'])
+        .optional()
+        .describe('Change conversation status'),
+      assignee: z
+        .union([z.coerce.number(), z.literal('none')])
+        .optional()
+        .describe('User ID to assign to, or "none" to unassign'),
+      customer: z.coerce.number().optional().describe('Change primary customer ID'),
+      subject: z.string().optional().describe('Update subject line'),
+      mailbox: z.coerce.number().optional().describe('Move to different mailbox'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, status, assignee, customer, subject, mailbox }) => {
     const operations: Array<{ op: string; path: string; value?: unknown }> = [];
@@ -1827,26 +1997,36 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('get_conversation_fields', 'Get custom field values for a conversation');
+server.registerTool(
   'get_conversation_fields',
-  'Get custom field values for a conversation',
-  { conversationId: z.coerce.number().describe('Conversation ID') },
+  {
+    title: 'Get Conversation Fields',
+    description: 'Get custom field values for a conversation',
+    inputSchema: { conversationId: z.coerce.number().describe('Conversation ID') },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
   async ({ conversationId }) => jsonResponse(await client.getConversationFields(conversationId))
 );
 
-server.tool(
+rememberTool('update_conversation_fields', 'Update custom field values on a conversation');
+server.registerTool(
   'update_conversation_fields',
-  'Update custom field values on a conversation',
   {
-    conversationId: z.coerce.number().describe('Conversation ID'),
-    fields: z
-      .array(
-        z.object({
-          id: z.coerce.number().describe('Field ID'),
-          value: z.string().describe('Field value'),
-        })
-      )
-      .describe('Array of field updates'),
+    title: 'Update Conversation Fields',
+    description: 'Update custom field values on a conversation',
+    inputSchema: {
+      conversationId: z.coerce.number().describe('Conversation ID'),
+      fields: z
+        .array(
+          z.object({
+            id: z.coerce.number().describe('Field ID'),
+            value: z.string().describe('Field value'),
+          })
+        )
+        .describe('Array of field updates'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, fields }) => {
     await client.updateConversationFields(conversationId, fields);
@@ -1854,62 +2034,105 @@ server.tool(
   }
 );
 
-server.tool('get_current_user', 'Get the currently authenticated user', {}, async () =>
-  jsonResponse(await client.getCurrentUser())
+rememberTool('get_current_user', 'Get the currently authenticated user');
+server.registerTool(
+  'get_current_user',
+  {
+    title: 'Get Current User',
+    description: 'Get the currently authenticated user',
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
+  async () => jsonResponse(await client.getCurrentUser())
 );
 
-server.tool(
+rememberTool('list_teams', 'List all teams');
+server.registerTool(
   'list_teams',
-  'List all teams',
-  { page: z.coerce.number().optional().describe('Page number') },
+  {
+    title: 'List Teams',
+    description: 'List all teams',
+    inputSchema: { page: z.coerce.number().optional().describe('Page number') },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
   async ({ page }) => jsonResponse(await client.listTeams(page))
 );
 
-server.tool(
+rememberTool('get_team', 'Get team details');
+server.registerTool(
   'get_team',
-  'Get team details',
-  { teamId: z.coerce.number().describe('Team ID') },
+  {
+    title: 'Get Team',
+    description: 'Get team details',
+    inputSchema: { teamId: z.coerce.number().describe('Team ID') },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
   async ({ teamId }) => jsonResponse(await client.getTeam(teamId))
 );
 
-server.tool(
+rememberTool('list_team_members', 'List members of a team');
+server.registerTool(
   'list_team_members',
-  'List members of a team',
   {
-    teamId: z.coerce.number().describe('Team ID'),
-    page: z.coerce.number().optional().describe('Page number'),
+    title: 'List Team Members',
+    description: 'List members of a team',
+    inputSchema: {
+      teamId: z.coerce.number().describe('Team ID'),
+      page: z.coerce.number().optional().describe('Page number'),
+    },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
   async ({ teamId, page }) => jsonResponse(await client.listTeamMembers(teamId, page))
 );
 
 // Attachments
-server.tool(
+rememberTool(
   'list_conversation_attachments',
-  'List all attachments in a conversation (across all threads)',
-  { conversationId: z.coerce.number().describe('Conversation ID') },
-  async ({ conversationId }) => jsonResponse(await client.listConversationAttachments(conversationId))
+  'List all attachments in a conversation (across all threads)'
+);
+server.registerTool(
+  'list_conversation_attachments',
+  {
+    title: 'List Conversation Attachments',
+    description: 'List all attachments in a conversation (across all threads)',
+    inputSchema: { conversationId: z.coerce.number().describe('Conversation ID') },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
+  async ({ conversationId }) =>
+    jsonResponse(await client.listConversationAttachments(conversationId))
 );
 
-server.tool(
+rememberTool('get_attachment_data', 'Get attachment content as base64-encoded data');
+server.registerTool(
   'get_attachment_data',
-  'Get attachment content as base64-encoded data',
   {
-    conversationId: z.coerce.number().describe('Conversation ID'),
-    attachmentId: z.coerce.number().describe('Attachment ID'),
+    title: 'Get Attachment Data',
+    description: 'Get attachment content as base64-encoded data',
+    inputSchema: {
+      conversationId: z.coerce.number().describe('Conversation ID'),
+      attachmentId: z.coerce.number().describe('Attachment ID'),
+    },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, attachmentId }) =>
     jsonResponse(await client.getAttachmentData(conversationId, attachmentId))
 );
 
-server.tool(
+rememberTool('create_attachment', 'Upload an attachment to a thread');
+server.registerTool(
   'create_attachment',
-  'Upload an attachment to a thread',
   {
-    conversationId: z.coerce.number().describe('Conversation ID'),
-    threadId: z.coerce.number().describe('Thread ID'),
-    fileName: z.string().describe('Name of the attachment file'),
-    mimeType: z.string().describe('MIME type of the attachment (e.g., "image/png", "application/pdf")'),
-    data: z.string().describe('Base64-encoded file content'),
+    title: 'Create Attachment',
+    description: 'Upload an attachment to a thread',
+    inputSchema: {
+      conversationId: z.coerce.number().describe('Conversation ID'),
+      threadId: z.coerce.number().describe('Thread ID'),
+      fileName: z.string().describe('Name of the attachment file'),
+      mimeType: z
+        .string()
+        .describe('MIME type of the attachment (e.g., "image/png", "application/pdf")'),
+      data: z.string().describe('Base64-encoded file content'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, threadId, fileName, mimeType, data }) => {
     await client.createAttachment(conversationId, threadId, { fileName, mimeType, data });
@@ -1917,12 +2140,17 @@ server.tool(
   }
 );
 
-server.tool(
+rememberTool('delete_attachment', 'Delete an attachment (only works on draft conversations)');
+server.registerTool(
   'delete_attachment',
-  'Delete an attachment (only works on draft conversations)',
   {
-    conversationId: z.coerce.number().describe('Conversation ID'),
-    attachmentId: z.coerce.number().describe('Attachment ID'),
+    title: 'Delete Attachment',
+    description: 'Delete an attachment (only works on draft conversations)',
+    inputSchema: {
+      conversationId: z.coerce.number().describe('Conversation ID'),
+      attachmentId: z.coerce.number().describe('Attachment ID'),
+    },
+    annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS,
   },
   async ({ conversationId, attachmentId }) => {
     await client.deleteAttachment(conversationId, attachmentId);
@@ -1942,57 +2170,106 @@ const reportDateSchema = {
   folders: z.string().optional().describe('Filter by folder IDs (comma-separated)'),
 };
 
-server.tool(
+rememberTool(
   'get_company_report',
-  'Get company-wide performance metrics including customers helped, replies, and user stats (Plus/Pro plans)',
-  reportDateSchema,
+  'Get company-wide performance metrics including customers helped, replies, and user stats (Plus/Pro plans)'
+);
+server.registerTool(
+  'get_company_report',
+  {
+    title: 'Get Company Report',
+    description:
+      'Get company-wide performance metrics including customers helped, replies, and user stats (Plus/Pro plans)',
+    inputSchema: reportDateSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
   async (params) => jsonResponse(await client.getCompanyReport(params))
 );
 
-server.tool(
+rememberTool(
   'get_conversations_report',
-  'Get conversation volume, busiest times, tag usage, and activity metrics',
-  reportDateSchema,
+  'Get conversation volume, busiest times, tag usage, and activity metrics'
+);
+server.registerTool(
+  'get_conversations_report',
+  {
+    title: 'Get Conversations Report',
+    description: 'Get conversation volume, busiest times, tag usage, and activity metrics',
+    inputSchema: reportDateSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
   async (params) => jsonResponse(await client.getConversationsReport(params))
 );
 
-server.tool(
+rememberTool(
   'get_productivity_report',
-  'Get response time, resolution time, and first response metrics',
+  'Get response time, resolution time, and first response metrics'
+);
+server.registerTool(
+  'get_productivity_report',
   {
-    ...reportDateSchema,
-    officeHours: z.boolean().optional().describe('Calculate within office hours only'),
+    title: 'Get Productivity Report',
+    description: 'Get response time, resolution time, and first response metrics',
+    inputSchema: {
+      ...reportDateSchema,
+      officeHours: z.boolean().optional().describe('Calculate within office hours only'),
+    },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
   async (params) => jsonResponse(await client.getProductivityReport(params))
 );
 
-server.tool(
+rememberTool(
   'get_happiness_report',
-  'Get customer satisfaction scores (great/okay/not good percentages)',
-  reportDateSchema,
+  'Get customer satisfaction scores (great/okay/not good percentages)'
+);
+server.registerTool(
+  'get_happiness_report',
+  {
+    title: 'Get Happiness Report',
+    description: 'Get customer satisfaction scores (great/okay/not good percentages)',
+    inputSchema: reportDateSchema,
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+  },
   async (params) => jsonResponse(await client.getHappinessReport(params))
 );
 
-server.tool(
+rememberTool(
   'get_first_response_time',
-  'Get first response time as time series data for charting',
+  'Get first response time as time series data for charting'
+);
+server.registerTool(
+  'get_first_response_time',
   {
-    ...reportDateSchema,
-    officeHours: z.boolean().optional().describe('Calculate within office hours only'),
-    viewBy: z.enum(['day', 'week', 'month']).optional().describe('Data granularity'),
+    title: 'Get First Response Time',
+    description: 'Get first response time as time series data for charting',
+    inputSchema: {
+      ...reportDateSchema,
+      officeHours: z.boolean().optional().describe('Calculate within office hours only'),
+      viewBy: z.enum(['day', 'week', 'month']).optional().describe('Data granularity'),
+    },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
   async (params) => jsonResponse(await client.getFirstResponseTimeReport(params))
 );
 
-server.tool(
+rememberTool(
   'get_happiness_ratings',
-  'List individual customer satisfaction ratings with comments',
+  'List individual customer satisfaction ratings with comments'
+);
+server.registerTool(
+  'get_happiness_ratings',
   {
-    ...reportDateSchema,
-    page: z.coerce.number().optional().describe('Page number'),
-    sortField: z.enum(['number', 'modifiedAt', 'rating']).optional().describe('Sort field'),
-    sortOrder: z.enum(['ASC', 'DESC']).optional().describe('Sort order'),
-    rating: z.enum(['great', 'ok', 'not-good', 'all']).optional().describe('Filter by rating'),
+    title: 'Get Happiness Ratings',
+    description: 'List individual customer satisfaction ratings with comments',
+    inputSchema: {
+      ...reportDateSchema,
+      page: z.coerce.number().optional().describe('Page number'),
+      sortField: z.enum(['number', 'modifiedAt', 'rating']).optional().describe('Sort field'),
+      sortOrder: z.enum(['ASC', 'DESC']).optional().describe('Sort order'),
+      rating: z.enum(['great', 'ok', 'not-good', 'all']).optional().describe('Filter by rating'),
+    },
+    annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
   async (params) => jsonResponse(await client.getHappinessRatings(params))
 );
