@@ -117,6 +117,48 @@ describe('HelpScoutClient', () => {
     expect(threads[0].createdBy?.type).toBe('system_user');
   });
 
+  it('downloads an attachment as raw bytes from the /file endpoint', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(new Uint8Array([1, 2, 3, 4]), {
+        status: 200,
+        headers: { 'Content-Type': 'image/png' },
+      })
+    );
+
+    const buf = await client.downloadAttachment(123, 456);
+
+    expect(buf).toEqual(Buffer.from([1, 2, 3, 4]));
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.helpscout.net/v2/conversations/123/attachments/456/file'
+    );
+    const init = fetchMock.mock.calls[0][1];
+    expect((init.headers as Record<string, string>).Accept).toBe('application/octet-stream');
+    expect(init.redirect).toBe('manual');
+  });
+
+  it('follows a storage redirect without forwarding the Authorization header', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(null, {
+          status: 302,
+          headers: { Location: 'https://s3.example.com/signed/x.png?sig=abc' },
+        })
+      )
+      .mockResolvedValueOnce(new Response(new Uint8Array([9, 9]), { status: 200 }));
+
+    const buf = await client.downloadAttachment(123, 456);
+
+    expect(buf).toEqual(Buffer.from([9, 9]));
+    expect(fetchMock.mock.calls[1][0]).toBe('https://s3.example.com/signed/x.png?sig=abc');
+    expect(fetchMock.mock.calls[1][1]).toBeUndefined();
+  });
+
+  it('throws HelpScoutApiError on a 404 so the command can fall back to base64', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ error: 'not found' }, { status: 404 }));
+
+    await expect(client.downloadAttachment(123, 456)).rejects.toMatchObject({ statusCode: 404 });
+  });
+
   it('creates a customer thread and returns the new thread id', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(null, {

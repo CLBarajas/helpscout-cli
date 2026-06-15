@@ -4,7 +4,7 @@ import { basename, resolve } from 'node:path';
 import { lookup } from 'mime-types';
 import { client } from '../lib/api-client.js';
 import { config } from '../lib/config.js';
-import { HelpScoutCliError } from '../lib/errors.js';
+import { HelpScoutCliError, HelpScoutApiError } from '../lib/errors.js';
 import { outputJson, htmlToPlainText, buildName } from '../lib/output.js';
 import { withErrorHandling, requireConfirmation, parseIdArg } from '../lib/command-utils.js';
 import { buildDateQuery } from '../lib/dates.js';
@@ -710,11 +710,23 @@ export function createConversationsCommand(): Command {
           const { attachments } = await client.listConversationAttachments(convId);
           const attachment = attachments.find((a) => a.id === attId);
 
-          // Get the attachment data
-          const data = await client.getAttachmentData(convId, attId);
+          // Prefer the streaming /file endpoint (raw bytes, no inflation); fall
+          // back to the legacy base64 /data endpoint if streaming is unavailable.
+          let buffer: Buffer;
+          let method: 'stream' | 'base64-fallback';
+          try {
+            buffer = await client.downloadAttachment(convId, attId);
+            method = 'stream';
+          } catch (err) {
+            const status = err instanceof HelpScoutApiError ? err.statusCode : undefined;
+            if (status !== 404 && status !== 410) {
+              throw err;
+            }
+            const data = await client.getAttachmentData(convId, attId);
+            buffer = Buffer.from(data.data, 'base64');
+            method = 'base64-fallback';
+          }
 
-          // Decode base64 and write to file
-          const buffer = Buffer.from(data.data, 'base64');
           const outputPath = options.output || attachment?.filename || `attachment-${attId}`;
           const resolvedPath = resolve(outputPath);
           writeFileSync(resolvedPath, buffer);
@@ -724,6 +736,7 @@ export function createConversationsCommand(): Command {
             path: resolvedPath,
             size: buffer.length,
             filename: attachment?.filename,
+            method,
           });
         }
       )

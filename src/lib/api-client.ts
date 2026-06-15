@@ -179,9 +179,18 @@ export class HelpScoutClient {
       rateLimitRetry?: boolean;
       version?: ApiVersion;
       accept?: string;
+      redirect?: 'follow' | 'error' | 'manual';
     } = {}
   ): Promise<Response> {
-    const { params, body, retry = true, rateLimitRetry = true, version = 'v2', accept } = options;
+    const {
+      params,
+      body,
+      retry = true,
+      rateLimitRetry = true,
+      version = 'v2',
+      accept,
+      redirect,
+    } = options;
 
     const base = version === 'v3' ? `${API_ROOT}/v3` : API_BASE;
     const url = new URL(`${base}${path}`);
@@ -202,6 +211,9 @@ export class HelpScoutClient {
       headers.Accept = accept;
     }
     const fetchOptions: RequestInit = { method, headers };
+    if (redirect) {
+      fetchOptions.redirect = redirect;
+    }
     if (body) {
       fetchOptions.body = JSON.stringify(body);
     }
@@ -228,6 +240,12 @@ export class HelpScoutClient {
       );
       await new Promise((resolve) => setTimeout(resolve, waitSeconds * 1000));
       return this.rawRequest(method, path, { ...options, rateLimitRetry: false });
+    }
+
+    // Under manual redirect, surface 3xx to the caller instead of treating it as
+    // a non-ok error (so the caller can re-fetch the Location without auth).
+    if (redirect === 'manual' && response.status >= 300 && response.status < 400) {
+      return response;
     }
 
     if (!response.ok) {
@@ -1356,6 +1374,38 @@ export class HelpScoutClient {
       'GET',
       `/conversations/${conversationId}/attachments/${attachmentId}/data`
     );
+  }
+
+  // Download attachment file via the streaming endpoint (raw bytes, no base64
+  // inflation; added to the HS API 2026-01-29). Documented as a direct 200, but
+  // if HS ever 30x-redirects to storage we must NOT forward the Authorization
+  // header to the storage host — hence manual redirect + a bare re-fetch.
+  async downloadAttachment(conversationId: number, attachmentId: number): Promise<Buffer> {
+    const response = await this.rawRequest(
+      'GET',
+      `/conversations/${conversationId}/attachments/${attachmentId}/file`,
+      { accept: 'application/octet-stream', redirect: 'manual' }
+    );
+
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get('Location');
+      if (!location) {
+        throw new HelpScoutCliError(
+          'Attachment download redirected without a Location header',
+          response.status
+        );
+      }
+      const redirected = await fetch(location); // bare fetch: no auth header on the storage hop
+      if (!redirected.ok) {
+        throw new HelpScoutCliError(
+          `Attachment storage fetch failed: ${redirected.status}`,
+          redirected.status
+        );
+      }
+      return Buffer.from(await redirected.arrayBuffer());
+    }
+
+    return Buffer.from(await response.arrayBuffer());
   }
 
   // Upload attachment to a thread
