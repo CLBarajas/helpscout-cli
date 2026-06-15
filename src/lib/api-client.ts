@@ -16,6 +16,9 @@ import type {
   RoutingConfig,
   RoutingConfigInput,
   SystemUser,
+  ThreadAttachmentInput,
+  ThreadOriginalSource,
+  ThreadScheduleInput,
   Tag,
   Workflow,
   Mailbox,
@@ -173,9 +176,10 @@ export class HelpScoutClient {
       retry?: boolean;
       rateLimitRetry?: boolean;
       version?: ApiVersion;
+      accept?: string;
     } = {}
   ): Promise<Response> {
-    const { params, body, retry = true, rateLimitRetry = true, version = 'v2' } = options;
+    const { params, body, retry = true, rateLimitRetry = true, version = 'v2', accept } = options;
 
     const base = version === 'v3' ? `${API_ROOT}/v3` : API_BASE;
     const url = new URL(`${base}${path}`);
@@ -188,13 +192,14 @@ export class HelpScoutClient {
     }
 
     const token = await this.getAccessToken();
-    const fetchOptions: RequestInit = {
-      method,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
     };
+    if (accept) {
+      headers.Accept = accept;
+    }
+    const fetchOptions: RequestInit = { method, headers };
     if (body) {
       fetchOptions.body = JSON.stringify(body);
     }
@@ -990,6 +995,91 @@ export class HelpScoutClient {
   // Update a customer's property VALUES — JSON Patch array sent whole (ops: replace/remove).
   async updateCustomerProperties(customerId: number, operations: CustomerPropertyOperation[]) {
     await this.request<void>('PATCH', `/customers/${customerId}/properties`, { body: operations });
+  }
+
+  // Thread creation (customer/chat/phone). `customer` is a nested {id} or {email}.
+  async createCustomerThread(
+    conversationId: number,
+    data: {
+      text: string;
+      customer: { id: number } | { email: string };
+      imported?: boolean;
+      cc?: string[];
+      bcc?: string[];
+      createdAt?: string;
+      attachments?: ThreadAttachmentInput[];
+    }
+  ): Promise<{ id: number; url: string }> {
+    return this.requestForCreation(`/conversations/${conversationId}/customer`, data);
+  }
+
+  async createChatThread(
+    conversationId: number,
+    data: {
+      text: string;
+      customer: { id: number } | { email: string };
+      imported?: boolean;
+      createdAt?: string;
+      attachments?: ThreadAttachmentInput[];
+    }
+  ): Promise<{ id: number; url: string }> {
+    return this.requestForCreation(`/conversations/${conversationId}/chats`, data);
+  }
+
+  async createPhoneThread(
+    conversationId: number,
+    data: {
+      text: string;
+      customer: { id: number } | { email: string };
+      imported?: boolean;
+      createdAt?: string;
+      attachments?: ThreadAttachmentInput[];
+    }
+  ): Promise<{ id: number; url: string }> {
+    return this.requestForCreation(`/conversations/${conversationId}/phones`, data);
+  }
+
+  // Thread original source — JSON variant returns { original }.
+  async getThreadSource(conversationId: number, threadId: number) {
+    return this.request<ThreadOriginalSource>(
+      'GET',
+      `/conversations/${conversationId}/threads/${threadId}/original-source`
+    );
+  }
+
+  // Thread original source — RFC 822 (raw .eml). Same path, content-negotiated via
+  // Accept; must read raw text (request<T> would JSON.parse and throw).
+  async getThreadSourceRfc822(conversationId: number, threadId: number): Promise<string> {
+    const response = await this.rawRequest(
+      'GET',
+      `/conversations/${conversationId}/threads/${threadId}/original-source`,
+      { accept: 'message/rfc822' }
+    );
+    return response.text();
+  }
+
+  // Thread schedule (Send Later) — manage an existing scheduled draft thread.
+  async updateThreadSchedule(conversationId: number, threadId: number, data: ThreadScheduleInput) {
+    await this.request<void>(
+      'PUT',
+      `/conversations/${conversationId}/threads/${threadId}/schedule`,
+      { body: data }
+    );
+  }
+
+  async publishThreadSchedule(conversationId: number, threadId: number) {
+    await this.request<void>(
+      'PATCH',
+      `/conversations/${conversationId}/threads/${threadId}/schedule`,
+      { body: { op: 'replace', path: '/state', value: 'published' } }
+    );
+  }
+
+  async deleteThreadSchedule(conversationId: number, threadId: number) {
+    await this.request<void>(
+      'DELETE',
+      `/conversations/${conversationId}/threads/${threadId}/schedule`
+    );
   }
 
   // Tags

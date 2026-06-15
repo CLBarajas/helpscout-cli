@@ -325,6 +325,25 @@ export interface CustomerOverwriteInput {
   age?: string;
 }
 
+// Inline attachment for thread creation (customer/chat/phone threads).
+export interface ThreadAttachmentInput {
+  fileName: string;
+  mimeType: string;
+  data: string; // Base64-encoded
+}
+
+// Response of GET .../original-source with Accept: application/json
+export interface ThreadOriginalSource {
+  original: string;
+}
+
+// Input for PUT .../schedule (Send Later)
+export interface ThreadScheduleInput {
+  scheduledFor: string; // ISO 8601, future, <= year 2100
+  unscheduleOnCustomerReply: boolean;
+  sendAsCreator?: boolean;
+}
+
 export interface User {
   id: number;
   firstName?: string;

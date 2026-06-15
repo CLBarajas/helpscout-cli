@@ -791,5 +791,222 @@ export function createConversationsCommand(): Command {
       )
     );
 
+  // Thread creation (customer/chat/phone). Customer is required as {id} or {email}.
+  const buildThreadCustomer = (options: {
+    customerId?: string;
+    customerEmail?: string;
+  }): { id: number } | { email: string } => {
+    if (options.customerEmail && options.customerId) {
+      throw new HelpScoutCliError('Provide --customer-id or --customer-email, not both', 400);
+    }
+    if (options.customerEmail) {
+      return { email: options.customerEmail };
+    }
+    if (options.customerId) {
+      return { id: parseIdArg(options.customerId, 'customer') };
+    }
+    throw new HelpScoutCliError('Either --customer-id or --customer-email is required', 400);
+  };
+
+  cmd
+    .command('add-customer-thread')
+    .description('Add a thread authored by the customer (use --imported to avoid reopening)')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#"')
+    .requiredOption('--text <text>', 'Thread text')
+    .option('--customer-id <id>', 'Customer ID (or use --customer-email)')
+    .option('--customer-email <email>', 'Customer email (or use --customer-id)')
+    .option('--imported', 'Suppress notifications and do not reopen the conversation')
+    .option('--created-at <date>', 'ISO 8601 timestamp (only meaningful with --imported)')
+    .option('--cc <emails>', 'CC emails (comma-separated)')
+    .option('--bcc <emails>', 'BCC emails (comma-separated)')
+    .action(
+      withErrorHandling(
+        async (
+          id: string,
+          options: {
+            text: string;
+            customerId?: string;
+            customerEmail?: string;
+            imported?: boolean;
+            createdAt?: string;
+            cc?: string;
+            bcc?: string;
+          }
+        ) => {
+          const result = await client.createCustomerThread(await client.resolveConversationId(id), {
+            text: options.text,
+            customer: buildThreadCustomer(options),
+            ...(options.imported && { imported: true }),
+            ...(options.createdAt && { createdAt: options.createdAt }),
+            ...(options.cc && { cc: options.cc.split(',').map((e) => e.trim()) }),
+            ...(options.bcc && { bcc: options.bcc.split(',').map((e) => e.trim()) }),
+          });
+          outputJson({ message: 'Customer thread added', id: result.id });
+        }
+      )
+    );
+
+  cmd
+    .command('add-chat-thread')
+    .description('Add a chat thread to a conversation')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#"')
+    .requiredOption('--text <text>', 'Thread text')
+    .option('--customer-id <id>', 'Customer ID (or use --customer-email)')
+    .option('--customer-email <email>', 'Customer email (or use --customer-id)')
+    .option('--imported', 'Suppress notifications')
+    .option('--created-at <date>', 'ISO 8601 timestamp (only meaningful with --imported)')
+    .action(
+      withErrorHandling(
+        async (
+          id: string,
+          options: {
+            text: string;
+            customerId?: string;
+            customerEmail?: string;
+            imported?: boolean;
+            createdAt?: string;
+          }
+        ) => {
+          const result = await client.createChatThread(await client.resolveConversationId(id), {
+            text: options.text,
+            customer: buildThreadCustomer(options),
+            ...(options.imported && { imported: true }),
+            ...(options.createdAt && { createdAt: options.createdAt }),
+          });
+          outputJson({ message: 'Chat thread added', id: result.id });
+        }
+      )
+    );
+
+  cmd
+    .command('add-phone-thread')
+    .description('Add a phone thread to a conversation')
+    .argument('<id>', 'Conversation ID, or ticket number prefixed with "#"')
+    .requiredOption('--text <text>', 'Thread text')
+    .option('--customer-id <id>', 'Customer ID (or use --customer-email)')
+    .option('--customer-email <email>', 'Customer email (or use --customer-id)')
+    .option('--imported', 'Suppress notifications')
+    .option('--created-at <date>', 'ISO 8601 timestamp (only meaningful with --imported)')
+    .action(
+      withErrorHandling(
+        async (
+          id: string,
+          options: {
+            text: string;
+            customerId?: string;
+            customerEmail?: string;
+            imported?: boolean;
+            createdAt?: string;
+          }
+        ) => {
+          const result = await client.createPhoneThread(await client.resolveConversationId(id), {
+            text: options.text,
+            customer: buildThreadCustomer(options),
+            ...(options.imported && { imported: true }),
+            ...(options.createdAt && { createdAt: options.createdAt }),
+          });
+          outputJson({ message: 'Phone thread added', id: result.id });
+        }
+      )
+    );
+
+  cmd
+    .command('thread-source')
+    .description('Get a thread\'s original source (JSON, or raw RFC 822 with --rfc822)')
+    .argument('<conversationId>', 'Conversation ID, or ticket number prefixed with "#"')
+    .argument('<threadId>', 'Thread ID')
+    .option('--rfc822', 'Output the raw RFC 822 message (.eml) instead of JSON')
+    .option('-o, --output <path>', 'Write output to a file instead of stdout')
+    .action(
+      withErrorHandling(
+        async (
+          conversationId: string,
+          threadId: string,
+          options: { rfc822?: boolean; output?: string }
+        ) => {
+          const convId = await client.resolveConversationId(conversationId);
+          const thrId = parseIdArg(threadId, 'thread');
+          if (options.rfc822) {
+            const raw = await client.getThreadSourceRfc822(convId, thrId);
+            if (options.output) {
+              const resolvedPath = resolve(options.output);
+              writeFileSync(resolvedPath, raw);
+              outputJson({ message: 'Source written', path: resolvedPath, size: raw.length });
+            } else {
+              process.stdout.write(raw);
+            }
+          } else {
+            const source = await client.getThreadSource(convId, thrId);
+            if (options.output) {
+              const resolvedPath = resolve(options.output);
+              writeFileSync(resolvedPath, source.original);
+              outputJson({ message: 'Source written', path: resolvedPath });
+            } else {
+              outputJson(source);
+            }
+          }
+        }
+      )
+    );
+
+  cmd
+    .command('schedule-thread')
+    .description('Schedule a draft thread to send later (Send Later)')
+    .argument('<conversationId>', 'Conversation ID, or ticket number prefixed with "#"')
+    .argument('<threadId>', 'Thread ID')
+    .requiredOption('--at <date>', 'When to send (ISO 8601, future)')
+    .option('--unschedule-on-reply', 'Cancel the schedule if the customer replies first')
+    .option('--send-as-creator', 'Send as the thread creator')
+    .action(
+      withErrorHandling(
+        async (
+          conversationId: string,
+          threadId: string,
+          options: { at: string; unscheduleOnReply?: boolean; sendAsCreator?: boolean }
+        ) => {
+          await client.updateThreadSchedule(
+            await client.resolveConversationId(conversationId),
+            parseIdArg(threadId, 'thread'),
+            {
+              scheduledFor: options.at,
+              unscheduleOnCustomerReply: options.unscheduleOnReply ?? false,
+              ...(options.sendAsCreator && { sendAsCreator: true }),
+            }
+          );
+          outputJson({ message: 'Thread scheduled' });
+        }
+      )
+    );
+
+  cmd
+    .command('publish-schedule')
+    .description('Publish (send now) a scheduled thread')
+    .argument('<conversationId>', 'Conversation ID, or ticket number prefixed with "#"')
+    .argument('<threadId>', 'Thread ID')
+    .action(
+      withErrorHandling(async (conversationId: string, threadId: string) => {
+        await client.publishThreadSchedule(
+          await client.resolveConversationId(conversationId),
+          parseIdArg(threadId, 'thread')
+        );
+        outputJson({ message: 'Scheduled thread published' });
+      })
+    );
+
+  cmd
+    .command('unschedule-thread')
+    .description('Delete a thread schedule (revert to a plain draft)')
+    .argument('<conversationId>', 'Conversation ID, or ticket number prefixed with "#"')
+    .argument('<threadId>', 'Thread ID')
+    .action(
+      withErrorHandling(async (conversationId: string, threadId: string) => {
+        await client.deleteThreadSchedule(
+          await client.resolveConversationId(conversationId),
+          parseIdArg(threadId, 'thread')
+        );
+        outputJson({ message: 'Thread schedule deleted' });
+      })
+    );
+
   return cmd;
 }

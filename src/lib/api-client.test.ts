@@ -117,6 +117,68 @@ describe('HelpScoutClient', () => {
     expect(threads[0].createdBy?.type).toBe('system_user');
   });
 
+  it('creates a customer thread and returns the new thread id', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(null, {
+        status: 201,
+        headers: { 'Resource-ID': '999', Location: '/v2/conversations/123/threads/999' },
+      })
+    );
+
+    const result = await client.createCustomerThread(123, {
+      text: 'Imported message',
+      customer: { id: 42 },
+    });
+
+    expect(result.id).toBe(999);
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.helpscout.net/v2/conversations/123/customer',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ text: 'Imported message', customer: { id: 42 } }),
+      })
+    );
+  });
+
+  it('creates chat and phone threads at their respective paths', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 201, headers: { 'Resource-ID': '5' } }))
+      .mockResolvedValueOnce(new Response(null, { status: 201, headers: { 'Resource-ID': '6' } }));
+
+    await client.createChatThread(123, { text: 'hi', customer: { email: 'a@b.com' } });
+    await client.createPhoneThread(123, { text: 'called in', customer: { id: 7 } });
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v2/conversations/123/chats');
+    expect(fetchMock.mock.calls[1][0]).toBe('https://api.helpscout.net/v2/conversations/123/phones');
+  });
+
+  it('gets thread source as raw RFC 822 with the message/rfc822 Accept header', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response('From: a@b.com\r\nSubject: Hi\r\n\r\nbody', { status: 200 })
+    );
+
+    const raw = await client.getThreadSourceRfc822(123, 456);
+
+    expect(raw).toBe('From: a@b.com\r\nSubject: Hi\r\n\r\nbody');
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>).Accept).toBe(
+      'message/rfc822'
+    );
+  });
+
+  it('publishes a thread schedule with a state-replace PATCH', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await client.publishThreadSchedule(123, 456);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.helpscout.net/v2/conversations/123/threads/456/schedule',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ op: 'replace', path: '/state', value: 'published' }),
+      })
+    );
+  });
+
   it('walks v3 customer pages via the _links.next cursor', async () => {
     fetchMock
       .mockResolvedValueOnce(
