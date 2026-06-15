@@ -1,11 +1,12 @@
 # v3 Enhancement Wave — Roadmap
 
 **Drafted:** 2026-06-12 (post v2.16.0 merge `bea4efd`)
-**Status (2026-06-14):** Item #2 (registerTool migration) ✅ DONE (not yet committed/pushed).
-Item #3 (HS API v3) Phase-0 research ✅ DONE — decision table filled in
-`HSAPI_V3_ADOPTION_PLAN.md`. Item #4 first issue (#48, draft-reply 400) ✅ FILED.
-Remaining code work is now an ordered, rollable checklist — see **Execution order** below.
-Each linked spec is self-contained for a fresh session.
+**Status (2026-06-14):** registerTool migration ✅ committed+pushed. HS API v3 Phase-0
+research ✅. **Shipped this session:** Slice C (`conversationCount`), version-aware
+`request()`, Slice A (v3 `system_user` attribution, opt-in). Upstream issue #48 filed.
+**Remaining:** checklist #2 (streaming attachments), #5 (List Customers v3 cursor —
+conditional), #6 (more upstream issues), plus post-restart live smokes. See **Execution
+order** below. Each linked spec is self-contained for a fresh session.
 **Provenance:** Synthesized from the 6/12 HS Mailbox API changelog review (outboard `tasks/log.md`),
 the 6/10 merge-session backlog (outboard `tasks/inbox.md`), and `FORK_IMPLEMENTATION_PLAN.md`.
 "v3" = this wave of fork enhancements, largely built around Help Scout's API v3 endpoint rollout.
@@ -29,27 +30,29 @@ The single source of truth for "what's next." Tick each as it lands; gates
 (`typecheck && lint && test` → `build` + `link`; MCP changes need a session restart)
 apply to every code step. **Never push without Chris.**
 
-- [ ] **0. Commit + push the registerTool migration** *(manual — Chris)*. Clears the
-      deck (origin is ~4 behind). Also pending: post-restart MCP smokes
-      (`create_note`, one live `note --status closed`, `search_conversations` caps)
-      and the Dev CLAUDE.md MCP-table annotations note.
-- [ ] **1. v3 Slice C — `conversationCount`** · S · no v3 plumbing. Surface the
-      existing **v2** field (added 2025-11-26) in `customers view` + `get_customer`
-      (CLI + MCP). Smallest, zero-risk warm-up. → `HSAPI_V3_ADOPTION_PLAN.md` Slice C.
+- [x] **0. Commit + push the registerTool migration** — done 6/14 (`36f6c35`+`c1c1d0f`;
+      origin now 0/0). **Still pending (need a session restart / Chris):** post-restart
+      MCP smokes (`create_note`, one live `note --status closed`, `search_conversations`
+      caps) and the Dev CLAUDE.md MCP-table annotations note.
+- [x] **1. v3 Slice C — `conversationCount`** — done 6/14 (`34a9648`). Surfaced the
+      existing **v2** field on the Customer type + MCP `customerSchema`, locked by a
+      `getCustomer` test. (Outboard `TESTING.md` verify line left uncommitted for Chris.)
 - [ ] **2. Streaming attachments** · S · independent. → `STREAMING_ATTACHMENTS_PLAN.md`.
       Step 0 (confirm exact download path/redirect behavior against the docs) is the
       gate; changelog research is already warm from the v3 dive. Implement with the
       base64 fallback so `/debug-log-reader` is unaffected.
-- [ ] **3. Version-aware `request()` refactor** · XS · enables all v3 REST. Add an
-      optional `version: 'v2' | 'v3'` to `api-client.ts` `request()` (build base from
-      `…helpscout.net/${version}`, default `v2`). Isolated, no behavior change. HS
-      exposes v3 as separate `/v3/` paths per-endpoint, so do NOT flip the base globally.
-- [ ] **4. v3 Slice A — Get Conversation v3 + List Threads v3** · M · depends on #3.
-      `system_user` attribution: `closedByUser`/`createdBy`/`assignee` on the
-      conversation (`GET /v3/conversations/{id}`) + per-thread `createdBy`/`assignedTo`
-      (`GET /v3/conversations/{id}/threads`). Surface as **additive** fields in CLI +
-      `get_conversation`/`get_conversation_threads` MCP — never drop v2 fields. This is
-      the slice with a waiting consumer: the Knowledge Bot false-positive audit.
+- [x] **3. Version-aware `request()` refactor** — done 6/14 (shipped in `549cd22`).
+      `api-client.ts` `request()`/`rawRequest()` take optional `version: 'v2' | 'v3'`
+      (default v2); base built from `${API_ROOT}/${version}`. v3 is per-endpoint, base
+      not flipped globally.
+- [x] **4. v3 Slice A — Get Conversation v3 + List Threads v3** — done 6/14 (`549cd22`).
+      `getConversationV3()` + `version` arg on `getConversationThreads()`; additive
+      `assignee.type` / `closedByUser` / thread `assignedTo.type` types; **opt-in** `--v3`
+      CLI flag on `conversations view`/`threads` and `version` enum on the
+      `get_conversation`/`get_conversation_threads` MCP tools (default stays v2). Tests
+      cover v3 URL routing + `system_user` passthrough. **Open decision:** keep opt-in or
+      make v3 the default? **Live verification** (a known bot-actioned conversation) needs
+      a session restart.
 - [ ] **5. v3 Slice B — List Customers v3 cursor** · M · depends on #3 · **conditional**.
       Only if a concrete large-scan need surfaces (bounce/paddle reconciliation). New
       cursor-walk helper (`cursor` param → `_links.next.href`), v2 fallback retained.
@@ -60,8 +63,8 @@ apply to every code step. **Never push without Chris.**
 
 | Spec | Size | Status |
 |------|------|--------|
-| [REGISTERTOOL_MIGRATION_PLAN.md](REGISTERTOOL_MIGRATION_PLAN.md) | L | ✅ Done 6/14 (uncommitted) |
-| [HSAPI_V3_ADOPTION_PLAN.md](HSAPI_V3_ADOPTION_PLAN.md) | M | Phase-0 research ✅; slices C/A/B = checklist #1,#4,#5 |
+| [REGISTERTOOL_MIGRATION_PLAN.md](REGISTERTOOL_MIGRATION_PLAN.md) | L | ✅ Done 6/14 (`36f6c35`, pushed) |
+| [HSAPI_V3_ADOPTION_PLAN.md](HSAPI_V3_ADOPTION_PLAN.md) | M | Phase-0 ✅; Slice C ✅ (`34a9648`), Slice A ✅ (`549cd22`); Slice B pending/conditional (#5) |
 | [STREAMING_ATTACHMENTS_PLAN.md](STREAMING_ATTACHMENTS_PLAN.md) | S | Spec only = checklist #2 |
 | [UPSTREAM_ISSUES_PLAN.md](UPSTREAM_ISSUES_PLAN.md) | S | In progress (#48 filed) = checklist #6 |
 
