@@ -117,6 +117,78 @@ describe('HelpScoutClient', () => {
     expect(threads[0].createdBy?.type).toBe('system_user');
   });
 
+  it('walks v3 customer pages via the _links.next cursor', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        Response.json({
+          _embedded: { customers: [{ id: 1, createdAt: '2026-06-02T00:00:00Z' }] },
+          _links: { next: { href: 'https://api.helpscout.net/v3/customers?cursor=ABC123' } },
+        })
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          _embedded: { customers: [{ id: 2, createdAt: '2026-06-01T00:00:00Z' }] },
+          _links: {},
+        })
+      );
+
+    const customers = await client.listAllCustomersV3();
+
+    expect(customers.map((c) => c.id)).toEqual([1, 2]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v3/customers');
+    expect(fetchMock.mock.calls[1][0]).toBe('https://api.helpscout.net/v3/customers?cursor=ABC123');
+  });
+
+  it('stops the v3 cursor-walk at maxResults', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        _embedded: { customers: [{ id: 1 }, { id: 2 }] },
+        _links: { next: { href: 'https://api.helpscout.net/v3/customers?cursor=X' } },
+      })
+    );
+
+    const customers = await client.listAllCustomersV3({}, 1);
+
+    expect(customers).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('deletes a customer asynchronously via async=true', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 202 }));
+
+    await client.deleteCustomerAsync(42);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v2/customers/42?async=true');
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ method: 'DELETE' }));
+  });
+
+  it('reads the hyphenated customer-properties embedded key', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ _embedded: { 'customer-properties': [{ type: 'text', slug: 'car', name: 'Car' }] } })
+    );
+
+    const defs = await client.listCustomerPropertyDefinitions();
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v2/customer-properties');
+    expect(defs).toEqual([{ type: 'text', slug: 'car', name: 'Car' }]);
+  });
+
+  it('sends customer property updates as a JSON Patch array', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    const ops = [
+      { op: 'replace' as const, path: '/car', value: 'Tesla' },
+      { op: 'remove' as const, path: '/revenue' },
+    ];
+
+    await client.updateCustomerProperties(100, ops);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.helpscout.net/v2/customers/100/properties',
+      expect.objectContaining({ method: 'PATCH', body: JSON.stringify(ops) })
+    );
+  });
+
   it('reads the hyphenated social-profiles embedded key', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({ _embedded: { 'social-profiles': [{ id: 7, type: 'twitter', value: '@x' }] } })

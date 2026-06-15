@@ -6,6 +6,9 @@ import type {
   Customer,
   CustomerAddress,
   CustomerAddressInput,
+  CustomerOverwriteInput,
+  CustomerPropertyDefinition,
+  CustomerPropertyOperation,
   DraftConversationStatus,
   Webhook,
   WebhookInput,
@@ -35,6 +38,17 @@ import type {
 const API_ROOT = 'https://api.helpscout.net';
 const API_BASE = `${API_ROOT}/v2`;
 type ApiVersion = 'v2' | 'v3';
+
+// v3 endpoints (e.g. List Customers v3) use cursor pagination: the next page's
+// opaque cursor token is embedded in _links.next.href, with no page/totalPages.
+interface CursorPaginatedResponse<T> {
+  _embedded: T;
+  _links?: {
+    self?: { href: string };
+    first?: { href: string };
+    next?: { href: string };
+  };
+}
 const TOKEN_URL = 'https://api.helpscout.net/v2/oauth2/token';
 
 interface TokenResponse {
@@ -886,6 +900,96 @@ export class HelpScoutClient {
 
   async getSystemUser(systemUserId: number) {
     return this.request<SystemUser>('GET', `/system-users/${systemUserId}`, { version: 'v3' });
+  }
+
+  // List Customers v3 — cursor pagination (no page/totalPages; spans all mailboxes).
+  // Pass no cursor for page one; pass the token from the previous page for the next.
+  async listCustomersV3(
+    params: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      createdSince?: string;
+      modifiedSince?: string;
+      query?: string;
+      cursor?: string;
+    } = {}
+  ) {
+    const response = await this.request<CursorPaginatedResponse<{ customers: Customer[] }>>(
+      'GET',
+      '/customers',
+      { params, version: 'v3' }
+    );
+    const nextHref = response._links?.next?.href;
+    const nextCursor = nextHref
+      ? (new URL(nextHref).searchParams.get('cursor') ?? undefined)
+      : undefined;
+    return {
+      customers: response._embedded?.customers || [],
+      nextCursor,
+    };
+  }
+
+  // Fetch-all helper: walks _links.next until it disappears.
+  async listAllCustomersV3(
+    params: {
+      firstName?: string;
+      lastName?: string;
+      email?: string;
+      createdSince?: string;
+      modifiedSince?: string;
+      query?: string;
+    } = {},
+    maxResults?: number
+  ): Promise<Customer[]> {
+    const all: Customer[] = [];
+    let cursor: string | undefined;
+    do {
+      const { customers, nextCursor } = await this.listCustomersV3({ ...params, cursor });
+      all.push(...customers);
+      if (maxResults && all.length >= maxResults) {
+        return all.slice(0, maxResults);
+      }
+      cursor = nextCursor;
+    } while (cursor);
+    return all;
+  }
+
+  // Overwrite Customer — full-replace PUT; any omitted field is cleared by Help Scout.
+  async overwriteCustomer(customerId: number, data: CustomerOverwriteInput) {
+    await this.request<void>('PUT', `/customers/${customerId}`, { body: data });
+  }
+
+  // Delete Customer Asynchronously — same path as the sync delete plus ?async=true (202).
+  async deleteCustomerAsync(customerId: number) {
+    await this.request<void>('DELETE', `/customers/${customerId}`, { params: { async: true } });
+  }
+
+  // Customer property definitions (company-wide). List embeds under the hyphenated key.
+  async listCustomerPropertyDefinitions() {
+    const response = await this.request<{
+      _embedded?: { 'customer-properties': CustomerPropertyDefinition[] };
+    }>('GET', '/customer-properties');
+    return response._embedded?.['customer-properties'] || [];
+  }
+
+  async createCustomerPropertyDefinition(data: {
+    type: 'number' | 'text' | 'url' | 'date' | 'dropdown';
+    slug: string;
+    name: string;
+    options?: Array<{ id?: string; label: string }>;
+  }) {
+    await this.request<void>('POST', '/customer-properties', { body: data });
+  }
+
+  // Deleted by slug (not numeric id).
+  async deleteCustomerPropertyDefinition(slug: string) {
+    await this.request<void>('DELETE', `/customer-properties/${encodeURIComponent(slug)}`);
+  }
+
+  // Update a customer's property VALUES — JSON Patch array sent whole (ops: replace/remove).
+  async updateCustomerProperties(customerId: number, operations: CustomerPropertyOperation[]) {
+    await this.request<void>('PATCH', `/customers/${customerId}/properties`, { body: operations });
   }
 
   // Tags

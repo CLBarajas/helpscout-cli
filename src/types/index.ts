@@ -298,6 +298,33 @@ export interface SystemUser {
   updatedAt?: string;
 }
 
+export interface CustomerPropertyDefinition {
+  type: 'number' | 'text' | 'url' | 'date' | 'dropdown';
+  slug: string;
+  name: string;
+  options?: Array<{ id: string; label: string }>; // dropdown only; id is a UUID
+}
+
+export type CustomerPropertyOperation =
+  | { op: 'replace'; path: string; value: string | number }
+  | { op: 'remove'; path: string };
+
+// Full field set for Overwrite Customer (full-replace PUT; omitted fields are cleared).
+export interface CustomerOverwriteInput {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  photoUrl?: string;
+  jobTitle?: string;
+  photoType?: string;
+  background?: string;
+  location?: string;
+  organization?: string;
+  organizationId?: number;
+  gender?: string;
+  age?: string;
+}
+
 export interface User {
   id: number;
   firstName?: string;

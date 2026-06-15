@@ -8,6 +8,7 @@ import {
   requireAtLeastOneField,
 } from '../lib/command-utils.js';
 import { buildDateQuery } from '../lib/dates.js';
+import type { CustomerPropertyOperation } from '../types/index.js';
 
 export function createCustomersCommand(): Command {
   const cmd = new Command('customers').description('Customer operations');
@@ -26,6 +27,11 @@ export function createCustomersCommand(): Command {
     .option('--sort-order <order>', 'Sort order (asc, desc)')
     .option('--page <number>', 'Page number')
     .option('-q, --query <query>', 'Advanced search query')
+    .option('--v3', 'Use the v3 cursor-paginated endpoint (spans all mailboxes; ignores --mailbox)')
+    .option('--cursor <cursor>', 'v3 only: pagination cursor token from a previous page')
+    .option('--all', 'v3 only: fetch all pages via cursor-walk')
+    .option('--email <email>', 'v3 only: filter by email')
+    .option('--max <number>', 'v3 only: cap total results when using --all')
     .action(
       withErrorHandling(
         async (options: {
@@ -40,7 +46,34 @@ export function createCustomersCommand(): Command {
           sortOrder?: string;
           page?: string;
           query?: string;
+          v3?: boolean;
+          cursor?: string;
+          all?: boolean;
+          email?: string;
+          max?: string;
         }) => {
+          if (options.v3) {
+            const v3Params = {
+              firstName: options.firstName,
+              lastName: options.lastName,
+              email: options.email,
+              createdSince: options.createdSince,
+              modifiedSince: options.modifiedSince,
+              query: options.query,
+            };
+            if (options.all) {
+              const customers = await client.listAllCustomersV3(
+                v3Params,
+                options.max ? parseInt(options.max, 10) : undefined
+              );
+              outputJson({ customers });
+            } else {
+              const result = await client.listCustomersV3({ ...v3Params, cursor: options.cursor });
+              outputJson(result);
+            }
+            return;
+          }
+
           const query = buildDateQuery(
             {
               createdSince: options.createdSince,
@@ -616,6 +649,162 @@ export function createCustomersCommand(): Command {
         await client.deleteCustomerAddress(parseIdArg(customerId, 'customer'));
         outputJson({ message: 'Address deleted' });
       })
+    );
+
+  // Overwrite Customer (full replace — clears omitted fields)
+  cmd
+    .command('overwrite')
+    .description('Overwrite a customer (full replace — omitted fields are cleared)')
+    .argument('<id>', 'Customer ID')
+    .option('--first-name <name>', 'First name')
+    .option('--last-name <name>', 'Last name')
+    .option('--phone <phone>', 'Phone number')
+    .option('--photo-url <url>', 'Photo URL')
+    .option('--job-title <title>', 'Job title')
+    .option('--photo-type <type>', 'Photo type')
+    .option('--background <text>', 'Background notes')
+    .option('--location <location>', 'Location')
+    .option('--organization <org>', 'Organization')
+    .option('--organization-id <id>', 'Organization ID')
+    .option('--gender <gender>', 'Gender')
+    .option('--age <age>', 'Age')
+    .option('-y, --yes', 'Skip confirmation (this clears omitted fields)')
+    .action(
+      withErrorHandling(
+        async (
+          id: string,
+          options: {
+            firstName?: string;
+            lastName?: string;
+            phone?: string;
+            photoUrl?: string;
+            jobTitle?: string;
+            photoType?: string;
+            background?: string;
+            location?: string;
+            organization?: string;
+            organizationId?: string;
+            gender?: string;
+            age?: string;
+            yes?: boolean;
+          }
+        ) => {
+          requireConfirmation('customer (full overwrite — omitted fields are cleared)', options.yes);
+          const data = {
+            ...(options.firstName && { firstName: options.firstName }),
+            ...(options.lastName && { lastName: options.lastName }),
+            ...(options.phone && { phone: options.phone }),
+            ...(options.photoUrl && { photoUrl: options.photoUrl }),
+            ...(options.jobTitle && { jobTitle: options.jobTitle }),
+            ...(options.photoType && { photoType: options.photoType }),
+            ...(options.background && { background: options.background }),
+            ...(options.location && { location: options.location }),
+            ...(options.organization && { organization: options.organization }),
+            ...(options.organizationId && {
+              organizationId: parseIdArg(options.organizationId, 'organization'),
+            }),
+            ...(options.gender && { gender: options.gender }),
+            ...(options.age && { age: options.age }),
+          };
+          requireAtLeastOneField(data, 'Customer overwrite');
+          await client.overwriteCustomer(parseIdArg(id, 'customer'), data);
+          outputJson({ message: 'Customer overwritten' });
+        }
+      )
+    );
+
+  cmd
+    .command('delete-async')
+    .description('Delete a customer asynchronously (GDPR erasure; returns immediately)')
+    .argument('<id>', 'Customer ID')
+    .option('-y, --yes', 'Skip confirmation')
+    .action(
+      withErrorHandling(async (id: string, options: { yes?: boolean }) => {
+        requireConfirmation('customer', options.yes);
+        await client.deleteCustomerAsync(parseIdArg(id, 'customer'));
+        outputJson({ message: 'Customer deletion queued' });
+      })
+    );
+
+  // Customer Property Definitions (company-wide)
+  cmd
+    .command('property-definitions')
+    .description('List customer property definitions')
+    .action(
+      withErrorHandling(async () => {
+        const defs = await client.listCustomerPropertyDefinitions();
+        outputJson(defs);
+      })
+    );
+
+  cmd
+    .command('create-property-definition')
+    .description('Create a customer property definition')
+    .requiredOption('--type <type>', 'Property type: number, text, url, date, or dropdown')
+    .requiredOption('--slug <slug>', 'Unique slug (alphanumeric, hyphens, underscores)')
+    .requiredOption('--name <name>', 'Display name')
+    .option('--options <labels>', 'Dropdown options as comma-separated labels')
+    .action(
+      withErrorHandling(
+        async (options: { type: string; slug: string; name: string; options?: string }) => {
+          await client.createCustomerPropertyDefinition({
+            type: options.type as 'number' | 'text' | 'url' | 'date' | 'dropdown',
+            slug: options.slug,
+            name: options.name,
+            ...(options.options && {
+              options: options.options.split(',').map((label) => ({ label: label.trim() })),
+            }),
+          });
+          outputJson({ message: 'Property definition created' });
+        }
+      )
+    );
+
+  cmd
+    .command('delete-property-definition')
+    .description('Delete a customer property definition by slug')
+    .argument('<slug>', 'Property slug')
+    .option('-y, --yes', 'Skip confirmation')
+    .action(
+      withErrorHandling(async (slug: string, options: { yes?: boolean }) => {
+        requireConfirmation('property definition', options.yes);
+        await client.deleteCustomerPropertyDefinition(slug);
+        outputJson({ message: 'Property definition deleted' });
+      })
+    );
+
+  cmd
+    .command('set-properties')
+    .description("Set or remove a customer's property values (JSON Patch)")
+    .argument('<customerId>', 'Customer ID')
+    .option('--set <pairs>', 'slug=value pairs, comma-separated (replace)')
+    .option('--remove <slugs>', 'Slugs to remove, comma-separated')
+    .action(
+      withErrorHandling(
+        async (customerId: string, options: { set?: string; remove?: string }) => {
+          const operations: CustomerPropertyOperation[] = [];
+          if (options.set) {
+            for (const pair of options.set.split(',')) {
+              const idx = pair.indexOf('=');
+              if (idx === -1) continue;
+              const slug = pair.slice(0, idx).trim();
+              const value = pair.slice(idx + 1).trim();
+              if (slug) operations.push({ op: 'replace', path: `/${slug}`, value });
+            }
+          }
+          if (options.remove) {
+            for (const slug of options.remove.split(',')) {
+              const trimmed = slug.trim();
+              if (trimmed) operations.push({ op: 'remove', path: `/${trimmed}` });
+            }
+          }
+          if (operations.length === 0) {
+            throw new Error('Provide --set and/or --remove with at least one property');
+          }
+          await client.updateCustomerProperties(parseIdArg(customerId, 'customer'), operations);
+          outputJson({ message: 'Customer properties updated' });
+        }
+      )
     );
 
   return cmd;
