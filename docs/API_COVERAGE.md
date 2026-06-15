@@ -70,8 +70,12 @@ issues) rather than fork work — see `UPSTREAM_ISSUES_PLAN.md`.
 ## Notes
 - All new client methods are covered by `src/lib/api-client.test.ts` (mock-fetch:
   asserts paths, versions, `_embedded` keys, request bodies).
-- MCP tools were NOT added for the coverage batches (CLI was the goal). MCP parity for
-  webhooks / system-users / customer sub-resources / threads is a follow-on, and would
-  land in the registerTool idiom (see `REGISTERTOOL_MIGRATION_PLAN.md`).
+- **MCP parity DONE (2026-06-15):** all coverage batches now have MCP tools too —
+  webhooks, system-users, customer sub-resources + extras, mailbox folders/routing,
+  threads (create/source/schedule), users create/delete, ratings, and the 26 expanded
+  reports. All use the registerTool idiom with read-only/mutating/destructive annotations;
+  the registry-parity test guards `search_tools` discovery. MCP server now serves **132
+  tools** (up from 62). Not exposed via MCP: streaming attachment download (base64
+  `get_attachment_data` already serves MCP transport).
 - v3 endpoints (Get Conversation, List Threads, List Customers, System Users) route via
   the version-aware `request()` (`version: 'v3'`).
