@@ -212,6 +212,14 @@ export interface CustomerAddress {
   lines?: string[];
 }
 
+export interface CustomerAddressInput {
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
+  lines?: string[];
+}
+
 export interface User {
   id: number;
   firstName?: string;

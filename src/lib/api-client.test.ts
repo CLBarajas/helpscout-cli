@@ -117,6 +117,28 @@ describe('HelpScoutClient', () => {
     expect(threads[0].createdBy?.type).toBe('system_user');
   });
 
+  it('reads the hyphenated social-profiles embedded key', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ _embedded: { 'social-profiles': [{ id: 7, type: 'twitter', value: '@x' }] } })
+    );
+
+    const profiles = await client.listCustomerSocialProfiles(42);
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.helpscout.net/v2/customers/42/social-profiles'
+    );
+    expect(profiles).toEqual([{ id: 7, type: 'twitter', value: '@x' }]);
+  });
+
+  it('gets a customer address from the singular address path', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ id: 1, city: 'Dallas', state: 'TX' }));
+
+    const address = await client.getCustomerAddress(42);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v2/customers/42/address');
+    expect(address.city).toBe('Dallas');
+  });
+
   it('preserves conversationCount on getCustomer', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({ id: 42, createdAt: '2026-01-01T00:00:00Z', conversationCount: 10 })

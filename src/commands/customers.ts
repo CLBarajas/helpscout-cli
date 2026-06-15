@@ -311,5 +311,312 @@ export function createCustomersCommand(): Command {
       )
     );
 
+  // Customer Chat Handles
+  cmd
+    .command('chats')
+    .description('List customer chat handles')
+    .argument('<customerId>', 'Customer ID')
+    .action(
+      withErrorHandling(async (customerId: string) => {
+        const chats = await client.listCustomerChats(parseIdArg(customerId, 'customer'));
+        outputJson(chats);
+      })
+    );
+
+  cmd
+    .command('add-chat')
+    .description('Add chat handle to customer')
+    .argument('<customerId>', 'Customer ID')
+    .requiredOption('--type <type>', 'Chat type (e.g. aim, gtalk, msn, xmpp, skype, other)')
+    .requiredOption('--value <handle>', 'Chat handle')
+    .action(
+      withErrorHandling(async (customerId: string, options: { type: string; value: string }) => {
+        await client.createCustomerChat(parseIdArg(customerId, 'customer'), {
+          type: options.type,
+          value: options.value,
+        });
+        outputJson({ message: 'Chat handle added' });
+      })
+    );
+
+  cmd
+    .command('update-chat')
+    .description('Update customer chat handle')
+    .argument('<customerId>', 'Customer ID')
+    .argument('<chatId>', 'Chat handle ID')
+    .option('--type <type>', 'Chat type')
+    .option('--value <handle>', 'Chat handle')
+    .action(
+      withErrorHandling(
+        async (customerId: string, chatId: string, options: { type?: string; value?: string }) => {
+          const data = {
+            ...(options.type && { type: options.type }),
+            ...(options.value && { value: options.value }),
+          };
+          requireAtLeastOneField(data, 'Chat handle update');
+          await client.updateCustomerChat(
+            parseIdArg(customerId, 'customer'),
+            parseIdArg(chatId, 'chat handle'),
+            data
+          );
+          outputJson({ message: 'Chat handle updated' });
+        }
+      )
+    );
+
+  cmd
+    .command('delete-chat')
+    .description('Delete customer chat handle')
+    .argument('<customerId>', 'Customer ID')
+    .argument('<chatId>', 'Chat handle ID')
+    .option('-y, --yes', 'Skip confirmation')
+    .action(
+      withErrorHandling(async (customerId: string, chatId: string, options: { yes?: boolean }) => {
+        requireConfirmation('chat handle', options.yes);
+        await client.deleteCustomerChat(
+          parseIdArg(customerId, 'customer'),
+          parseIdArg(chatId, 'chat handle')
+        );
+        outputJson({ message: 'Chat handle deleted' });
+      })
+    );
+
+  // Customer Social Profiles
+  cmd
+    .command('social-profiles')
+    .description('List customer social profiles')
+    .argument('<customerId>', 'Customer ID')
+    .action(
+      withErrorHandling(async (customerId: string) => {
+        const profiles = await client.listCustomerSocialProfiles(parseIdArg(customerId, 'customer'));
+        outputJson(profiles);
+      })
+    );
+
+  cmd
+    .command('add-social-profile')
+    .description('Add social profile to customer')
+    .argument('<customerId>', 'Customer ID')
+    .requiredOption('--type <type>', 'Profile type (e.g. twitter, facebook, linkedin, other)')
+    .requiredOption('--value <url>', 'Profile URL or handle')
+    .action(
+      withErrorHandling(async (customerId: string, options: { type: string; value: string }) => {
+        await client.createCustomerSocialProfile(parseIdArg(customerId, 'customer'), {
+          type: options.type,
+          value: options.value,
+        });
+        outputJson({ message: 'Social profile added' });
+      })
+    );
+
+  cmd
+    .command('update-social-profile')
+    .description('Update customer social profile')
+    .argument('<customerId>', 'Customer ID')
+    .argument('<socialProfileId>', 'Social profile ID')
+    .option('--type <type>', 'Profile type')
+    .option('--value <url>', 'Profile URL or handle')
+    .action(
+      withErrorHandling(
+        async (
+          customerId: string,
+          socialProfileId: string,
+          options: { type?: string; value?: string }
+        ) => {
+          const data = {
+            ...(options.type && { type: options.type }),
+            ...(options.value && { value: options.value }),
+          };
+          requireAtLeastOneField(data, 'Social profile update');
+          await client.updateCustomerSocialProfile(
+            parseIdArg(customerId, 'customer'),
+            parseIdArg(socialProfileId, 'social profile'),
+            data
+          );
+          outputJson({ message: 'Social profile updated' });
+        }
+      )
+    );
+
+  cmd
+    .command('delete-social-profile')
+    .description('Delete customer social profile')
+    .argument('<customerId>', 'Customer ID')
+    .argument('<socialProfileId>', 'Social profile ID')
+    .option('-y, --yes', 'Skip confirmation')
+    .action(
+      withErrorHandling(
+        async (customerId: string, socialProfileId: string, options: { yes?: boolean }) => {
+          requireConfirmation('social profile', options.yes);
+          await client.deleteCustomerSocialProfile(
+            parseIdArg(customerId, 'customer'),
+            parseIdArg(socialProfileId, 'social profile')
+          );
+          outputJson({ message: 'Social profile deleted' });
+        }
+      )
+    );
+
+  // Customer Websites
+  cmd
+    .command('websites')
+    .description('List customer websites')
+    .argument('<customerId>', 'Customer ID')
+    .action(
+      withErrorHandling(async (customerId: string) => {
+        const websites = await client.listCustomerWebsites(parseIdArg(customerId, 'customer'));
+        outputJson(websites);
+      })
+    );
+
+  cmd
+    .command('add-website')
+    .description('Add website to customer')
+    .argument('<customerId>', 'Customer ID')
+    .requiredOption('--value <url>', 'Website URL')
+    .action(
+      withErrorHandling(async (customerId: string, options: { value: string }) => {
+        await client.createCustomerWebsite(parseIdArg(customerId, 'customer'), {
+          value: options.value,
+        });
+        outputJson({ message: 'Website added' });
+      })
+    );
+
+  cmd
+    .command('update-website')
+    .description('Update customer website')
+    .argument('<customerId>', 'Customer ID')
+    .argument('<websiteId>', 'Website ID')
+    .requiredOption('--value <url>', 'Website URL')
+    .action(
+      withErrorHandling(
+        async (customerId: string, websiteId: string, options: { value: string }) => {
+          await client.updateCustomerWebsite(
+            parseIdArg(customerId, 'customer'),
+            parseIdArg(websiteId, 'website'),
+            { value: options.value }
+          );
+          outputJson({ message: 'Website updated' });
+        }
+      )
+    );
+
+  cmd
+    .command('delete-website')
+    .description('Delete customer website')
+    .argument('<customerId>', 'Customer ID')
+    .argument('<websiteId>', 'Website ID')
+    .option('-y, --yes', 'Skip confirmation')
+    .action(
+      withErrorHandling(
+        async (customerId: string, websiteId: string, options: { yes?: boolean }) => {
+          requireConfirmation('website', options.yes);
+          await client.deleteCustomerWebsite(
+            parseIdArg(customerId, 'customer'),
+            parseIdArg(websiteId, 'website')
+          );
+          outputJson({ message: 'Website deleted' });
+        }
+      )
+    );
+
+  // Customer Address (a single address per customer)
+  const parseAddressOptions = (options: {
+    city?: string;
+    state?: string;
+    postalCode?: string;
+    country?: string;
+    lines?: string;
+  }) => ({
+    ...(options.city && { city: options.city }),
+    ...(options.state && { state: options.state }),
+    ...(options.postalCode && { postalCode: options.postalCode }),
+    ...(options.country && { country: options.country }),
+    ...(options.lines && { lines: options.lines.split(',').map((line) => line.trim()) }),
+  });
+
+  cmd
+    .command('address')
+    .description('Get a customer address')
+    .argument('<customerId>', 'Customer ID')
+    .action(
+      withErrorHandling(async (customerId: string) => {
+        const address = await client.getCustomerAddress(parseIdArg(customerId, 'customer'));
+        outputJson(address);
+      })
+    );
+
+  cmd
+    .command('add-address')
+    .description('Add an address to a customer')
+    .argument('<customerId>', 'Customer ID')
+    .option('--city <city>', 'City')
+    .option('--state <state>', 'State')
+    .option('--postal-code <code>', 'Postal code')
+    .option('--country <country>', 'Country')
+    .option('--lines <lines>', 'Address lines (comma-separated)')
+    .action(
+      withErrorHandling(
+        async (
+          customerId: string,
+          options: {
+            city?: string;
+            state?: string;
+            postalCode?: string;
+            country?: string;
+            lines?: string;
+          }
+        ) => {
+          const data = parseAddressOptions(options);
+          requireAtLeastOneField(data, 'Address');
+          await client.createCustomerAddress(parseIdArg(customerId, 'customer'), data);
+          outputJson({ message: 'Address added' });
+        }
+      )
+    );
+
+  cmd
+    .command('update-address')
+    .description('Update a customer address')
+    .argument('<customerId>', 'Customer ID')
+    .option('--city <city>', 'City')
+    .option('--state <state>', 'State')
+    .option('--postal-code <code>', 'Postal code')
+    .option('--country <country>', 'Country')
+    .option('--lines <lines>', 'Address lines (comma-separated)')
+    .action(
+      withErrorHandling(
+        async (
+          customerId: string,
+          options: {
+            city?: string;
+            state?: string;
+            postalCode?: string;
+            country?: string;
+            lines?: string;
+          }
+        ) => {
+          const data = parseAddressOptions(options);
+          requireAtLeastOneField(data, 'Address update');
+          await client.updateCustomerAddress(parseIdArg(customerId, 'customer'), data);
+          outputJson({ message: 'Address updated' });
+        }
+      )
+    );
+
+  cmd
+    .command('delete-address')
+    .description('Delete a customer address')
+    .argument('<customerId>', 'Customer ID')
+    .option('-y, --yes', 'Skip confirmation')
+    .action(
+      withErrorHandling(async (customerId: string, options: { yes?: boolean }) => {
+        requireConfirmation('address', options.yes);
+        await client.deleteCustomerAddress(parseIdArg(customerId, 'customer'));
+        outputJson({ message: 'Address deleted' });
+      })
+    );
+
   return cmd;
 }

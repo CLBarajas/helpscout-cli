@@ -4,6 +4,8 @@ import type {
   Conversation,
   ConversationStatus,
   Customer,
+  CustomerAddress,
+  CustomerAddressInput,
   DraftConversationStatus,
   Tag,
   Workflow,
@@ -708,6 +710,98 @@ export class HelpScoutClient {
 
   async deleteCustomerPhone(customerId: number, phoneId: number) {
     await this.request<void>('DELETE', `/customers/${customerId}/phones/${phoneId}`);
+  }
+
+  // Customer chat handles
+  async listCustomerChats(customerId: number) {
+    const response = await this.request<{
+      _embedded?: { chats: Array<{ id: number; type: string; value: string }> };
+    }>('GET', `/customers/${customerId}/chats`);
+    return response._embedded?.chats || [];
+  }
+
+  async createCustomerChat(customerId: number, data: { type: string; value: string }) {
+    await this.request<void>('POST', `/customers/${customerId}/chats`, { body: data });
+  }
+
+  async updateCustomerChat(
+    customerId: number,
+    chatId: number,
+    data: { type?: string; value?: string }
+  ) {
+    await this.request<void>('PUT', `/customers/${customerId}/chats/${chatId}`, { body: data });
+  }
+
+  async deleteCustomerChat(customerId: number, chatId: number) {
+    await this.request<void>('DELETE', `/customers/${customerId}/chats/${chatId}`);
+  }
+
+  // Customer social profiles
+  async listCustomerSocialProfiles(customerId: number) {
+    const response = await this.request<{
+      _embedded?: { 'social-profiles': Array<{ id: number; type: string; value: string }> };
+    }>('GET', `/customers/${customerId}/social-profiles`);
+    return response._embedded?.['social-profiles'] || [];
+  }
+
+  async createCustomerSocialProfile(customerId: number, data: { type: string; value: string }) {
+    await this.request<void>('POST', `/customers/${customerId}/social-profiles`, { body: data });
+  }
+
+  async updateCustomerSocialProfile(
+    customerId: number,
+    socialProfileId: number,
+    data: { type?: string; value?: string }
+  ) {
+    await this.request<void>('PUT', `/customers/${customerId}/social-profiles/${socialProfileId}`, {
+      body: data,
+    });
+  }
+
+  async deleteCustomerSocialProfile(customerId: number, socialProfileId: number) {
+    await this.request<void>(
+      'DELETE',
+      `/customers/${customerId}/social-profiles/${socialProfileId}`
+    );
+  }
+
+  // Customer websites
+  async listCustomerWebsites(customerId: number) {
+    const response = await this.request<{
+      _embedded?: { websites: Array<{ id: number; value: string }> };
+    }>('GET', `/customers/${customerId}/websites`);
+    return response._embedded?.websites || [];
+  }
+
+  async createCustomerWebsite(customerId: number, data: { value: string }) {
+    await this.request<void>('POST', `/customers/${customerId}/websites`, { body: data });
+  }
+
+  async updateCustomerWebsite(customerId: number, websiteId: number, data: { value: string }) {
+    await this.request<void>('PUT', `/customers/${customerId}/websites/${websiteId}`, {
+      body: data,
+    });
+  }
+
+  async deleteCustomerWebsite(customerId: number, websiteId: number) {
+    await this.request<void>('DELETE', `/customers/${customerId}/websites/${websiteId}`);
+  }
+
+  // Customer address (a single address per customer; no ID in the path)
+  async getCustomerAddress(customerId: number) {
+    return this.request<CustomerAddress>('GET', `/customers/${customerId}/address`);
+  }
+
+  async createCustomerAddress(customerId: number, data: CustomerAddressInput) {
+    await this.request<void>('POST', `/customers/${customerId}/address`, { body: data });
+  }
+
+  async updateCustomerAddress(customerId: number, data: CustomerAddressInput) {
+    await this.request<void>('PUT', `/customers/${customerId}/address`, { body: data });
+  }
+
+  async deleteCustomerAddress(customerId: number) {
+    await this.request<void>('DELETE', `/customers/${customerId}/address`);
   }
 
   // Tags
