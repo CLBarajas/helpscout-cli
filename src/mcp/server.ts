@@ -2291,6 +2291,67 @@ server.registerTool(
   async (params) => jsonResponse(await client.getHappinessRatings(params))
 );
 
+// --- Webhooks ---
+rememberTool('list_webhooks', 'List webhooks');
+server.registerTool('list_webhooks', { title: 'List Webhooks', description: 'List webhooks', inputSchema: { page: z.coerce.number().optional().describe('Page number') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ page }) => jsonResponse(await client.listWebhooks(page)));
+
+rememberTool('get_webhook', 'Get a webhook (the signing secret is never returned)');
+server.registerTool('get_webhook', { title: 'Get Webhook', description: 'Get a webhook (the signing secret is never returned by the API)', inputSchema: { webhookId: z.coerce.number().describe('Webhook ID') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ webhookId }) => jsonResponse(await client.getWebhook(webhookId)));
+
+const webhookBodySchema = {
+  url: z.string().describe('Destination URL'),
+  events: z.array(z.string()).describe('Event types (e.g. convo.created)'),
+  secret: z.string().describe('Signing secret (max 40 chars)'),
+  notification: z.boolean().optional().describe('Send only the resource URI'),
+  label: z.string().optional().describe('Human-readable label'),
+  payloadVersion: z.enum(['V2', 'V3']).optional().describe('Payload version (V3 preserves system_user)'),
+  mailboxIds: z.array(z.number()).optional().describe('Mailbox IDs to scope to (omit for all)'),
+};
+rememberTool('create_webhook', 'Create a webhook');
+server.registerTool('create_webhook', { title: 'Create Webhook', description: 'Create a webhook', inputSchema: webhookBodySchema, annotations: MUTATING_REMOTE_ANNOTATIONS }, async (data) => jsonResponse(await client.createWebhook(data)));
+
+rememberTool('update_webhook', 'Update a webhook (full replace: url, events, and secret are all required)');
+server.registerTool('update_webhook', { title: 'Update Webhook', description: 'Update a webhook (full replace: url, events, and secret are all required)', inputSchema: { webhookId: z.coerce.number().describe('Webhook ID'), ...webhookBodySchema }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ webhookId, ...data }) => { await client.updateWebhook(webhookId, data); return jsonResponse({ success: true }); });
+
+rememberTool('delete_webhook', 'Delete a webhook');
+server.registerTool('delete_webhook', { title: 'Delete Webhook', description: 'Delete a webhook', inputSchema: { webhookId: z.coerce.number().describe('Webhook ID') }, annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS }, async ({ webhookId }) => { await client.deleteWebhook(webhookId); return jsonResponse({ success: true }); });
+
+// --- Thread creation + source + schedule ---
+const threadCustomerSchema = {
+  customerId: z.coerce.number().optional().describe('Customer ID (or customerEmail)'),
+  customerEmail: z.string().optional().describe('Customer email (or customerId)'),
+};
+function resolveThreadCustomer(customerId?: number, customerEmail?: string): { id: number } | { email: string } {
+  if (customerEmail && customerId) throw new Error('Provide customerId or customerEmail, not both');
+  if (customerEmail) return { email: customerEmail };
+  if (customerId) return { id: customerId };
+  throw new Error('Either customerId or customerEmail is required');
+}
+
+rememberTool('create_customer_thread', 'Add a thread authored by the customer (use imported to avoid reopening)');
+server.registerTool('create_customer_thread', { title: 'Create Customer Thread', description: 'Add a thread authored by the customer (set imported=true to avoid reopening the conversation)', inputSchema: { conversationId: conversationRefSchema, text: z.string().describe('Thread text'), ...threadCustomerSchema, imported: z.boolean().optional(), createdAt: z.string().optional(), cc: z.array(z.string()).optional(), bcc: z.array(z.string()).optional() }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ conversationId, text, customerId, customerEmail, imported, createdAt, cc, bcc }) => { const id = await client.resolveConversationId(conversationId); const result = await client.createCustomerThread(id, { text, customer: resolveThreadCustomer(customerId, customerEmail), imported, createdAt, cc, bcc }); return jsonResponse({ success: true, id: result.id }); });
+
+rememberTool('create_chat_thread', 'Add a chat thread to a conversation');
+server.registerTool('create_chat_thread', { title: 'Create Chat Thread', description: 'Add a chat thread to a conversation', inputSchema: { conversationId: conversationRefSchema, text: z.string().describe('Thread text'), ...threadCustomerSchema, imported: z.boolean().optional(), createdAt: z.string().optional() }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ conversationId, text, customerId, customerEmail, imported, createdAt }) => { const id = await client.resolveConversationId(conversationId); const result = await client.createChatThread(id, { text, customer: resolveThreadCustomer(customerId, customerEmail), imported, createdAt }); return jsonResponse({ success: true, id: result.id }); });
+
+rememberTool('create_phone_thread', 'Add a phone thread to a conversation');
+server.registerTool('create_phone_thread', { title: 'Create Phone Thread', description: 'Add a phone thread to a conversation', inputSchema: { conversationId: conversationRefSchema, text: z.string().describe('Thread text'), ...threadCustomerSchema, imported: z.boolean().optional(), createdAt: z.string().optional() }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ conversationId, text, customerId, customerEmail, imported, createdAt }) => { const id = await client.resolveConversationId(conversationId); const result = await client.createPhoneThread(id, { text, customer: resolveThreadCustomer(customerId, customerEmail), imported, createdAt }); return jsonResponse({ success: true, id: result.id }); });
+
+rememberTool('get_thread_source', "Get a thread's original source (JSON: { original })");
+server.registerTool('get_thread_source', { title: 'Get Thread Source', description: "Get a thread's original source as JSON ({ original })", inputSchema: { conversationId: conversationRefSchema, threadId: z.coerce.number().describe('Thread ID') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ conversationId, threadId }) => { const id = await client.resolveConversationId(conversationId); return jsonResponse(await client.getThreadSource(id, threadId)); });
+
+rememberTool('get_thread_source_rfc822', "Get a thread's original source as raw RFC 822 (.eml)");
+server.registerTool('get_thread_source_rfc822', { title: 'Get Thread Source (RFC 822)', description: "Get a thread's original source as raw RFC 822 (.eml) text", inputSchema: { conversationId: conversationRefSchema, threadId: z.coerce.number().describe('Thread ID') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ conversationId, threadId }) => { const id = await client.resolveConversationId(conversationId); return jsonResponse({ source: await client.getThreadSourceRfc822(id, threadId) }); });
+
+rememberTool('update_thread_schedule', 'Schedule a draft thread to send later (Send Later)');
+server.registerTool('update_thread_schedule', { title: 'Update Thread Schedule', description: 'Schedule a draft thread to send later (Send Later)', inputSchema: { conversationId: conversationRefSchema, threadId: z.coerce.number().describe('Thread ID'), scheduledFor: z.string().describe('When to send (ISO 8601, future)'), unscheduleOnCustomerReply: z.boolean().describe('Cancel the schedule if the customer replies first'), sendAsCreator: z.boolean().optional() }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ conversationId, threadId, scheduledFor, unscheduleOnCustomerReply, sendAsCreator }) => { const id = await client.resolveConversationId(conversationId); await client.updateThreadSchedule(id, threadId, { scheduledFor, unscheduleOnCustomerReply, sendAsCreator }); return jsonResponse({ success: true }); });
+
+rememberTool('publish_thread_schedule', 'Publish (send now) a scheduled thread');
+server.registerTool('publish_thread_schedule', { title: 'Publish Thread Schedule', description: 'Publish (send now) a scheduled thread', inputSchema: { conversationId: conversationRefSchema, threadId: z.coerce.number().describe('Thread ID') }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ conversationId, threadId }) => { const id = await client.resolveConversationId(conversationId); await client.publishThreadSchedule(id, threadId); return jsonResponse({ success: true }); });
+
+rememberTool('delete_thread_schedule', 'Delete a thread schedule (revert to a plain draft)');
+server.registerTool('delete_thread_schedule', { title: 'Delete Thread Schedule', description: 'Delete a thread schedule (revert to a plain draft)', inputSchema: { conversationId: conversationRefSchema, threadId: z.coerce.number().describe('Thread ID') }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ conversationId, threadId }) => { const id = await client.resolveConversationId(conversationId); await client.deleteThreadSchedule(id, threadId); return jsonResponse({ success: true }); });
+
 // --- Customer chat handles ---
 rememberTool('list_customer_chats', 'List chat handles for a customer');
 server.registerTool('list_customer_chats', { title: 'List Customer Chats', description: 'List chat handles for a customer', inputSchema: { customerId: z.coerce.number().describe('Customer ID') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ customerId }) => jsonResponse(await client.listCustomerChats(customerId)));
