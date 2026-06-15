@@ -9,8 +9,8 @@ Legend: ✅ covered · ◑ partial · ⬜ not yet · ⏸ parked (intentional)
 - ✅ list, view (+`--v3`), create, update, delete
 - Threads: ✅ list (+`--v3`), note, draft-reply, update-thread, **add-customer/chat/phone-thread**, **thread-source (+`--rfc822`)**
 - Threads scheduling: ✅ **schedule-thread / publish-schedule / unschedule-thread**
-- ✅ attachments: list, attachment-download (base64), attachment-upload, attachment-delete
-- ⬜ **Download Attachment File** (streaming endpoint — the deferred "streaming attachments" item; base64 path works today)
+- ✅ attachments: list, attachment-download (✅ now streams via `/file` with base64 fallback),
+  attachment-upload, attachment-delete
 - ✅ custom fields (fields/set-field), tags (add/remove), snooze/unsnooze
 
 ## Customers
@@ -29,36 +29,43 @@ Legend: ✅ covered · ◑ partial · ⬜ not yet · ⏸ parked (intentional)
 - ✅ **list, view** (v3 API; the AI-agent actors behind `system_user`)
 
 ## Users
-- ✅ list, view, me (resource owner)
-- ⬜ **create, delete**
-- ⏸ status: list / get / set (speculative rotation/coverage tooling)
+- ✅ list, view, me (resource owner — confirmed == /users/me), **create, delete**
+- ⏸ status: list / get / set (speculative rotation/coverage tooling — left for upstream)
+
+## System Users
+- ✅ list, view (v3)
+
+## Ratings
+- ✅ view (Get Satisfaction Rating, GET /v2/ratings/{id})
 
 ## Teams / Tags / Workflows / Saved Replies / Reports
 - ✅ teams: list, view, members
 - ✅ tags: list, view
 - ✅ workflows: list, run, activate, deactivate
 - ✅ saved-replies: list, view, create, update, delete
-- ◑ reports: company, conversations, productivity (overall), happiness (overall),
-  ratings, first-response-time. ⬜ remaining drilldowns + user/channel reports
-  (company drilldown/customers-helped; conversations volumes-by-channel/busiest/
-  drilldown/new/received; docs overall; user/team reports; chat/email/phone reports)
-  — large, Plus/Pro-only.
-
-## Ratings
-- ⬜ **Get Satisfaction Rating** (single rating by id; happiness ratings list exists)
+- ✅ reports — **full family coverage** (Plus/Pro). Company (overall, customers-helped,
+  drilldown); Conversations (overall, volumes-by-channel, busiest, drilldown,
+  fields-drilldown, new-conversations, new-conversations-drilldown, received-messages);
+  Productivity (overall, first-response-time, replies-sent, resolution-time, resolved,
+  response-time); Happiness (overall, ratings); Docs (overall — needs a Docs plan);
+  User/Team (overall, conversation-history, customers-helped, drilldown, happiness,
+  happiness-ratings, replies, resolutions, chat); Channel (chat, email, phone).
 
 ## Organizations
 - ⏸ entire group (list/get/create/update/delete + conversations/customers + property
-  definitions) — B2C-shaped; no Rogue Amoeba use case identified.
+  definitions) — B2C-shaped; no Rogue Amoeba use case identified. Candidate to gauge
+  upstream interest (issues-not-PRs) rather than build.
 
 ---
 
-## Remaining work (priority order)
+## Remaining (intentionally parked)
 
-1. **Users create/delete** + **Ratings get** — small, quick wins.
-2. **Download Attachment File (streaming)** — the `STREAMING_ATTACHMENTS_PLAN.md` item.
-3. **Reports expansion** — many endpoints; Plus/Pro; lower value. Batch if wanted.
-4. **Organizations**, **User status** — parked; implement only on a concrete need.
+Full CLI coverage of the Mailbox API is now in place except:
+1. **Organizations** — B2C-shaped; no RA use case. Leave for upstream.
+2. **User status** (list/get/set) — speculative presence tooling. Leave for upstream.
+
+Both are good candidates for an upstream "gauge interest" issue (Stephen builds from
+issues) rather than fork work — see `UPSTREAM_ISSUES_PLAN.md`.
 
 ## Notes
 - All new client methods are covered by `src/lib/api-client.test.ts` (mock-fetch:
