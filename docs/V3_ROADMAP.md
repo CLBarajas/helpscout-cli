@@ -37,10 +37,10 @@ apply to every code step. **Never push without Chris.**
 - [x] **1. v3 Slice C — `conversationCount`** — done 6/14 (`34a9648`). Surfaced the
       existing **v2** field on the Customer type + MCP `customerSchema`, locked by a
       `getCustomer` test. (Outboard `TESTING.md` verify line left uncommitted for Chris.)
-- [ ] **2. Streaming attachments** · S · independent. → `STREAMING_ATTACHMENTS_PLAN.md`.
-      Step 0 (confirm exact download path/redirect behavior against the docs) is the
-      gate; changelog research is already warm from the v3 dive. Implement with the
-      base64 fallback so `/debug-log-reader` is unaffected.
+- [x] **2. Streaming attachments** — done 6/15 (`11decce`). `attachment-download` prefers the
+      streaming `/file` endpoint with base64 fallback; `rawRequest` gained a manual-redirect
+      auth-stripping guard. (Step 0 confirmed the endpoint is the *supported* path; base64 is
+      now legacy.)
 - [x] **3. Version-aware `request()` refactor** — done 6/14 (shipped in `549cd22`).
       `api-client.ts` `request()`/`rawRequest()` take optional `version: 'v2' | 'v3'`
       (default v2); base built from `${API_ROOT}/${version}`. v3 is per-endpoint, base
@@ -53,11 +53,27 @@ apply to every code step. **Never push without Chris.**
       cover v3 URL routing + `system_user` passthrough. **Open decision:** keep opt-in or
       make v3 the default? **Live verification** (a known bot-actioned conversation) needs
       a session restart.
-- [ ] **5. v3 Slice B — List Customers v3 cursor** · M · depends on #3 · **conditional**.
-      Only if a concrete large-scan need surfaces (bounce/paddle reconciliation). New
-      cursor-walk helper (`cursor` param → `_links.next.href`), v2 fallback retained.
-- [ ] **6. Upstream issues** · ongoing · independent. #48 filed 6/14; stagger 1–2 more
-      per `UPSTREAM_ISSUES_PLAN.md`, watch reception before investing further.
+- [x] **5. v3 Slice B — List Customers v3 cursor** — done 6/15 (`d22019d`) as part of the
+      full-coverage push: `customers list --v3` + `listAllCustomersV3` cursor-walk.
+- [ ] **6. Upstream issues** · ongoing · independent. #48 filed 6/14; Organizations/user-status
+      gauge-interest draft parked **privately in outboard** (not this repo) per Chris 6/15.
+
+## Beyond the wave — full API coverage + MCP parity (2026-06-15)
+
+The v3 wave above expanded into a complete Mailbox API coverage push (research fanned out to
+parallel spec subagents, integrated centrally). Now covered via CLI **and** MCP: customer
+sub-resources (chats/social/websites/address), webhooks CRUD, inbox folders + routing, system
+users (v3), customer property definitions + overwrite + async-delete + v3 cursor list, thread
+creation (customer/chat/phone) + original source + scheduling, user create/delete, ratings, and
+the full reports family (26 endpoints). MCP server now serves **132 tools** (was 62). Only
+parked: Organizations + user status (no RA use case). See `API_COVERAGE.md` for the matrix.
+
+**Still open (need a Claude Code session restart / live auth):** post-restart MCP smokes
+(`create_note`, live `note --status closed`, `search_conversations` caps), live verification of
+the new tools (system_user on a real bot conversation; streaming download on a large attachment;
+reports against the Plus account); the **Dev CLAUDE.md MCP-tool table is now very stale** (lists
+36; reality is 132) — left for Chris (global-instructions file). Deferred: `outputSchema`/
+structured content on the migrated + new MCP tools (handlers return `jsonResponse`).
 
 ### Spec index (size + status)
 
