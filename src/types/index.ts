@@ -220,6 +220,32 @@ export interface CustomerAddressInput {
   lines?: string[];
 }
 
+export type WebhookPayloadVersion = 'V2' | 'V3';
+export type WebhookState = 'enabled' | 'disabled';
+
+export interface Webhook {
+  id: number;
+  url: string;
+  state: WebhookState;
+  events: string[];
+  notification: boolean;
+  payloadVersion: WebhookPayloadVersion;
+  label?: string;
+  mailboxIds: number[];
+}
+
+export interface WebhookInput {
+  url: string;
+  events: string[];
+  // Help Scout never returns the secret on GET, and update is a full PUT replace,
+  // so the secret must be supplied on every create AND update.
+  secret: string;
+  notification?: boolean;
+  label?: string;
+  payloadVersion?: WebhookPayloadVersion;
+  mailboxIds?: number[];
+}
+
 export interface User {
   id: number;
   firstName?: string;

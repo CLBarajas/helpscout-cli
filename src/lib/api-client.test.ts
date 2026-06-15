@@ -139,6 +139,52 @@ describe('HelpScoutClient', () => {
     expect(address.city).toBe('Dallas');
   });
 
+  it('reads the webhooks embedded key on listWebhooks', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        _embedded: {
+          webhooks: [{ id: 10, url: 'https://x.test', state: 'enabled', events: ['convo.created'] }],
+        },
+        page: { size: 50, totalElements: 1, totalPages: 1, number: 1 },
+      })
+    );
+
+    const result = await client.listWebhooks();
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v2/webhooks');
+    expect(result.webhooks[0].id).toBe(10);
+  });
+
+  it('posts a create webhook body and parses the Resource-ID header', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(null, {
+        status: 201,
+        headers: { 'Resource-ID': '99', Location: 'https://api.helpscout.net/v2/webhooks/99' },
+      })
+    );
+
+    const result = await client.createWebhook({
+      url: 'https://x.test/hook',
+      events: ['convo.assigned'],
+      secret: 'mZ9XbGHodX',
+      payloadVersion: 'V3',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.helpscout.net/v2/webhooks',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          url: 'https://x.test/hook',
+          events: ['convo.assigned'],
+          secret: 'mZ9XbGHodX',
+          payloadVersion: 'V3',
+        }),
+      })
+    );
+    expect(result.id).toBe(99);
+  });
+
   it('preserves conversationCount on getCustomer', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({ id: 42, createdAt: '2026-01-01T00:00:00Z', conversationCount: 10 })

@@ -12,6 +12,7 @@ import { createWorkflowsCommand } from './commands/workflows.js';
 import { createTeamsCommand } from './commands/teams.js';
 import { createSavedRepliesCommand } from './commands/saved-replies.js';
 import { createReportsCommand } from './commands/reports.js';
+import { createWebhooksCommand } from './commands/webhooks.js';
 import { createMcpCommand } from './commands/mcp.js';
 
 declare const __VERSION__: string;
@@ -46,6 +47,7 @@ program.addCommand(createWorkflowsCommand());
 program.addCommand(createTeamsCommand());
 program.addCommand(createSavedRepliesCommand());
 program.addCommand(createReportsCommand());
+program.addCommand(createWebhooksCommand());
 program.addCommand(createMcpCommand());
 
 program.parseAsync().catch(() => {

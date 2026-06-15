@@ -7,6 +7,8 @@ import type {
   CustomerAddress,
   CustomerAddressInput,
   DraftConversationStatus,
+  Webhook,
+  WebhookInput,
   Tag,
   Workflow,
   Mailbox,
@@ -802,6 +804,37 @@ export class HelpScoutClient {
 
   async deleteCustomerAddress(customerId: number) {
     await this.request<void>('DELETE', `/customers/${customerId}/address`);
+  }
+
+  // Webhooks
+  async listWebhooks(page?: number) {
+    const response = await this.request<PaginatedResponse<{ webhooks: Webhook[] }>>(
+      'GET',
+      '/webhooks',
+      { params: page ? { page } : undefined }
+    );
+    return {
+      webhooks: response._embedded?.webhooks || [],
+      page: response.page,
+    };
+  }
+
+  async getWebhook(webhookId: number) {
+    return this.request<Webhook>('GET', `/webhooks/${webhookId}`);
+  }
+
+  async createWebhook(data: WebhookInput): Promise<{ id: number; url: string }> {
+    return this.requestForCreation('/webhooks', data);
+  }
+
+  // Help Scout does a full PUT replace; url/events/secret are all required (the
+  // secret is never returned by GET, so there is no safe read-then-merge).
+  async updateWebhook(webhookId: number, data: WebhookInput) {
+    await this.request<void>('PUT', `/webhooks/${webhookId}`, { body: data });
+  }
+
+  async deleteWebhook(webhookId: number) {
+    await this.request<void>('DELETE', `/webhooks/${webhookId}`);
   }
 
   // Tags
