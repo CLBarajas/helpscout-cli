@@ -10,7 +10,7 @@ function thread(id: number, type = 'customer') {
   };
 }
 
-function paginatedThreads(threads: ReturnType<typeof thread>[], page: number, totalPages: number) {
+function paginatedThreads(threads: Array<Record<string, unknown>>, page: number, totalPages: number) {
   return Response.json({
     _embedded: { threads },
     page: {
@@ -84,6 +84,37 @@ describe('HelpScoutClient', () => {
         body: JSON.stringify({ op: 'replace', path: '/status', value: 'closed' }),
       })
     );
+  });
+
+  it('hits the v3 path and preserves system_user attribution on getConversationV3', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        id: 123,
+        createdBy: { id: 0, type: 'system_user' },
+        assignee: { id: 0, type: 'system_user', first: 'AI', last: 'Agent', email: '' },
+        closedByUser: { id: 0, type: 'system_user' },
+      })
+    );
+
+    const conversation = await client.getConversationV3(123);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v3/conversations/123');
+    expect(conversation.createdBy?.type).toBe('system_user');
+    expect(conversation.assignee?.type).toBe('system_user');
+    expect(conversation.closedByUser?.type).toBe('system_user');
+  });
+
+  it('fetches threads from the v3 path when version is v3', async () => {
+    fetchMock.mockResolvedValueOnce(
+      paginatedThreads([{ ...thread(1), createdBy: { id: 0, type: 'system_user' } }], 1, 1)
+    );
+
+    const threads = await client.getConversationThreads(123, undefined, 'v3');
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.helpscout.net/v3/conversations/123/threads?page=1'
+    );
+    expect(threads[0].createdBy?.type).toBe('system_user');
   });
 
   it('preserves conversationCount on getCustomer', async () => {

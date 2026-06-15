@@ -211,12 +211,13 @@ export function createConversationsCommand(): Command {
     .command('view')
     .description('View a conversation')
     .argument('<id>', 'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")')
+    .option('--v3', 'Use the v3 endpoint — real actor types (incl. "system_user" for AI agents)')
     .action(
-      withErrorHandling(async (id: string) => {
-        const conversation = await client.getConversation(
-          await client.resolveConversationId(id),
-          'threads'
-        );
+      withErrorHandling(async (id: string, options: { v3?: boolean }) => {
+        const conversationId = await client.resolveConversationId(id);
+        const conversation = options.v3
+          ? await client.getConversationV3(conversationId, 'threads')
+          : await client.getConversation(conversationId, 'threads');
         const threadInfo = extractThreadInfo(conversation._embedded?.threads);
         const result = {
           ...conversation,
@@ -238,13 +239,24 @@ export function createConversationsCommand(): Command {
       'Filter by specific thread type(s), comma-separated (customer, message, note, lineitem, chat, phone, forwardchild, forwardparent, beaconchat)'
     )
     .option('--html', 'Output thread bodies as HTML (default is plain text)')
+    .option('--v3', 'Use the v3 threads endpoint — real actor types (incl. "system_user")')
     .action(
       withErrorHandling(
         async (
           id: string,
-          options: { includeNotes?: boolean; all?: boolean; type?: string; html?: boolean }
+          options: {
+            includeNotes?: boolean;
+            all?: boolean;
+            type?: string;
+            html?: boolean;
+            v3?: boolean;
+          }
         ) => {
-          let threads = await client.getConversationThreads(await client.resolveConversationId(id));
+          let threads = await client.getConversationThreads(
+            await client.resolveConversationId(id),
+            undefined,
+            options.v3 ? 'v3' : 'v2'
+          );
 
           if (options.type) {
             const types = options.type.split(',').map((t) => t.trim().toLowerCase());

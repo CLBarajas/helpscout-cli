@@ -38,6 +38,9 @@ export interface Conversation {
   mailboxId: number;
   assignee?: {
     id: number;
+    // v3 (GET /v3/conversations/{id}) returns the real actor type, including
+    // "system_user" for AI agents; v2 normalizes it to "user".
+    type?: string;
     first: string;
     last: string;
     email: string;
@@ -50,6 +53,12 @@ export interface Conversation {
   createdAt: string;
   closedAt?: string;
   closedBy?: number;
+  // v3 only: closing actor with real type (incl. "system_user").
+  closedByUser?: {
+    id: number;
+    type: string;
+    email?: string;
+  };
   modifiedAt?: string;
   customerWaitingSince?: {
     time: string;
@@ -103,6 +112,9 @@ export interface Thread {
   };
   assignedTo?: {
     id: number;
+    // v3 (GET /v3/conversations/{id}/threads) returns the real actor type,
+    // including "system_user" for AI agents; v2 normalizes it to "user".
+    type?: string;
     first: string;
     last: string;
     email: string;

@@ -24,7 +24,9 @@ import type {
   HappinessRatingsParams,
 } from '../types/index.js';
 
-const API_BASE = 'https://api.helpscout.net/v2';
+const API_ROOT = 'https://api.helpscout.net';
+const API_BASE = `${API_ROOT}/v2`;
+type ApiVersion = 'v2' | 'v3';
 const TOKEN_URL = 'https://api.helpscout.net/v2/oauth2/token';
 
 interface TokenResponse {
@@ -148,11 +150,13 @@ export class HelpScoutClient {
       body?: unknown;
       retry?: boolean;
       rateLimitRetry?: boolean;
+      version?: ApiVersion;
     } = {}
   ): Promise<Response> {
-    const { params, body, retry = true, rateLimitRetry = true } = options;
+    const { params, body, retry = true, rateLimitRetry = true, version = 'v2' } = options;
 
-    const url = new URL(`${API_BASE}${path}`);
+    const base = version === 'v3' ? `${API_ROOT}/v3` : API_BASE;
+    const url = new URL(`${base}${path}`);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
         if (value !== undefined) {
@@ -213,6 +217,7 @@ export class HelpScoutClient {
       body?: unknown;
       retry?: boolean;
       rateLimitRetry?: boolean;
+      version?: ApiVersion;
     } = {}
   ): Promise<T> {
     const response = await this.rawRequest(method, path, options);
@@ -342,6 +347,19 @@ export class HelpScoutClient {
   }
 
   /**
+   * Get Conversation via the v3 endpoint, which returns the real actor `type`
+   * (including "system_user" for AI agents) on createdBy/assignee/closedByUser.
+   * v2 normalizes system_user to user. Additive: same shape otherwise.
+   */
+  async getConversationV3(conversationId: number, embed?: string) {
+    const params = embed ? { embed } : undefined;
+    return this.request<Conversation>('GET', `/conversations/${conversationId}`, {
+      params,
+      version: 'v3',
+    });
+  }
+
+  /**
    * Resolve a conversation reference to its internal API id.
    *
    * Help Scout exposes two identifiers: the internal `id`, which the detail
@@ -377,7 +395,11 @@ export class HelpScoutClient {
     return parsed;
   }
 
-  async getConversationThreads(conversationId: number, maxResults?: number) {
+  async getConversationThreads(
+    conversationId: number,
+    maxResults?: number,
+    version: ApiVersion = 'v2'
+  ) {
     const threads: Thread[] = [];
     let page = 1;
     let totalPages = 1;
@@ -386,7 +408,7 @@ export class HelpScoutClient {
       const response = await this.request<PaginatedResponse<{ threads: Thread[] }>>(
         'GET',
         `/conversations/${conversationId}/threads`,
-        { params: { page } }
+        { params: { page }, version }
       );
 
       threads.push(...(response._embedded?.threads || []));

@@ -182,16 +182,20 @@ function capThreads(threads: Thread[], maxThreads: number) {
 async function getConversationDetail(
   conversationId: number,
   includeThreads = false,
-  maxThreads = DEFAULT_MAX_THREADS
+  maxThreads = DEFAULT_MAX_THREADS,
+  version: 'v2' | 'v3' = 'v2'
 ) {
-  const conversation = await client.getConversation(conversationId);
+  const conversation =
+    version === 'v3'
+      ? await client.getConversationV3(conversationId)
+      : await client.getConversation(conversationId);
   const detail: JsonObject = { conversation: normalizeConversation(conversation) };
 
   if (!includeThreads) {
     return detail;
   }
 
-  const threads = await client.getConversationThreads(conversationId);
+  const threads = await client.getConversationThreads(conversationId, undefined, version);
   return { ...detail, ...capThreads(threads, maxThreads) };
 }
 
@@ -915,13 +919,19 @@ server.registerTool(
         .optional()
         .default(DEFAULT_MAX_THREADS)
         .describe('Maximum threads to return (default 20). Keeps original message + most recent.'),
+      version: z
+        .enum(['v2', 'v3'])
+        .optional()
+        .describe(
+          'API version (default v2). Use "v3" to get the real actor type on createdBy/assignee/closedByUser — including "system_user" for AI agents (v2 normalizes it to "user").'
+        ),
     },
     outputSchema: conversationDetailOutputSchema,
     annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
-  async ({ conversationId: conversationRef, includeThreads = false, maxThreads }) => {
+  async ({ conversationId: conversationRef, includeThreads = false, maxThreads, version }) => {
     const conversationId = await client.resolveConversationId(conversationRef);
-    const detail = await getConversationDetail(conversationId, includeThreads, maxThreads);
+    const detail = await getConversationDetail(conversationId, includeThreads, maxThreads, version);
 
     return structuredJsonResult(detail, [
       resourceLinkContent(
@@ -957,13 +967,19 @@ server.registerTool(
         .positive()
         .optional()
         .describe('Optional cap on returned threads. Omit for full history.'),
+      version: z
+        .enum(['v2', 'v3'])
+        .optional()
+        .describe(
+          'API version (default v2). Use "v3" to get the real actor type on each thread\'s createdBy/assignedTo — including "system_user" for AI agents (v2 normalizes it to "user").'
+        ),
     },
     outputSchema: conversationThreadsOutputSchema,
     annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
-  async ({ conversationId: conversationRef, types, maxThreads }) => {
+  async ({ conversationId: conversationRef, types, maxThreads, version }) => {
     const conversationId = await client.resolveConversationId(conversationRef);
-    const threads = await client.getConversationThreads(conversationId);
+    const threads = await client.getConversationThreads(conversationId, undefined, version);
 
     return structuredJsonResult(
       buildConversationThreadsResult(conversationId, threads, {
