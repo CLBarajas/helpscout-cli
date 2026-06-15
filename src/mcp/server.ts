@@ -2291,6 +2291,75 @@ server.registerTool(
   async (params) => jsonResponse(await client.getHappinessRatings(params))
 );
 
+// --- Expanded report tools (registered via a table; all read-only, Plus/Pro) ---
+const viewByField = {
+  viewBy: z.enum(['day', 'week', 'month']).optional().describe('Data granularity'),
+};
+const officeHoursField = {
+  officeHours: z.boolean().optional().describe('Calculate within office hours only'),
+};
+const drilldownFields = {
+  page: z.coerce.number().optional().describe('Page number'),
+  rows: z.coerce.number().optional().describe('Results per page (default 25, max 50)'),
+};
+const userField = { user: z.coerce.number().describe('User ID (or Team ID for a team summary)') };
+const timeSeriesReportSchema = { ...reportDateSchema, ...officeHoursField, ...viewByField };
+
+const EXPANDED_REPORT_TOOLS: Array<{
+  name: string;
+  title: string;
+  description: string;
+  inputSchema: z.ZodRawShape;
+  run: (params: Record<string, unknown>) => Promise<unknown>;
+}> = [
+  // Company
+  { name: 'get_company_customers_helped_report', title: 'Get Company Customers Helped', description: 'Company customers-helped volume over time (Plus/Pro)', inputSchema: timeSeriesReportSchema, run: (p) => client.getCompanyCustomersHelpedReport(p as never) },
+  { name: 'get_company_drilldown_report', title: 'Get Company Drilldown', description: 'Drill down into conversations behind the company report (Plus/Pro)', inputSchema: { ...reportDateSchema, ...drilldownFields, range: z.enum(['replies', 'firstReplyResolved', 'resolved', 'responseTime', 'firstResponseTime', 'handleTime']).optional().describe('Drilldown range'), rangeId: z.coerce.number().optional().describe('Qualifier for range') }, run: (p) => client.getCompanyDrilldownReport(p as never) },
+  // Conversations
+  { name: 'get_volumes_by_channel_report', title: 'Get Volumes By Channel', description: 'Conversation volume split by chat, phone, and email (Plus/Pro)', inputSchema: timeSeriesReportSchema, run: (p) => client.getVolumesByChannelReport(p as never) },
+  { name: 'get_busy_times_report', title: 'Get Busiest Times', description: 'Busiest time-of-day heatmap, day-of-week x hour (Plus/Pro)', inputSchema: reportDateSchema, run: (p) => client.getBusyTimesReport(p as never) },
+  { name: 'get_conversations_drilldown_report', title: 'Get Conversations Drilldown', description: 'Drill down into conversations behind the conversations report (Plus/Pro)', inputSchema: { ...reportDateSchema, ...drilldownFields }, run: (p) => client.getConversationsDrilldownReport(p as never) },
+  { name: 'get_conversations_field_drilldown_report', title: 'Get Conversations Field Drilldown', description: 'Drill down by tag, reply, workflow, or customer (Plus/Pro)', inputSchema: { ...reportDateSchema, ...drilldownFields, field: z.enum(['tagid', 'replyid', 'workflowid', 'customerid']).describe('Field to drill down by'), fieldid: z.coerce.number().describe('ID of the tag/reply/workflow/customer') }, run: (p) => client.getConversationsFieldDrilldownReport(p as never) },
+  { name: 'get_new_conversations_report', title: 'Get New Conversations', description: 'New conversation volume over time (Plus/Pro)', inputSchema: timeSeriesReportSchema, run: (p) => client.getNewConversationsReport(p as never) },
+  { name: 'get_new_conversations_drilldown_report', title: 'Get New Conversations Drilldown', description: 'Drill down into the new-conversations report (Plus/Pro)', inputSchema: { ...reportDateSchema, ...drilldownFields }, run: (p) => client.getNewConversationsDrilldownReport(p as never) },
+  { name: 'get_received_messages_report', title: 'Get Received Messages', description: 'Received customer-message volume over time (Plus/Pro)', inputSchema: timeSeriesReportSchema, run: (p) => client.getReceivedMessagesReport(p as never) },
+  // Productivity
+  { name: 'get_replies_sent_report', title: 'Get Replies Sent', description: 'Replies sent as time series data (Plus/Pro)', inputSchema: timeSeriesReportSchema, run: (p) => client.getRepliesSentReport(p as never) },
+  { name: 'get_resolution_time_report', title: 'Get Resolution Time', description: 'Resolution time as time series data (Plus/Pro)', inputSchema: timeSeriesReportSchema, run: (p) => client.getResolutionTimeReport(p as never) },
+  { name: 'get_resolved_report', title: 'Get Resolved', description: 'Resolved conversation counts as time series data (Plus/Pro)', inputSchema: timeSeriesReportSchema, run: (p) => client.getResolvedReport(p as never) },
+  { name: 'get_response_time_report', title: 'Get Response Time', description: 'Response time as time series data (Plus/Pro)', inputSchema: timeSeriesReportSchema, run: (p) => client.getResponseTimeReport(p as never) },
+  // Docs
+  { name: 'get_docs_report', title: 'Get Docs Report', description: 'Docs usage metrics: searches, top articles (Plus/Pro; needs a Docs site)', inputSchema: { start: reportDateSchema.start, end: reportDateSchema.end, previousStart: reportDateSchema.previousStart, previousEnd: reportDateSchema.previousEnd, sites: z.string().optional().describe('Docs site IDs (comma-separated)') }, run: (p) => client.getDocsReport(p as never) },
+  // User/Team
+  { name: 'get_user_overall_report', title: 'Get User/Team Overall', description: 'User/Team overall activity snapshot (Plus/Pro)', inputSchema: { ...reportDateSchema, ...userField, ...officeHoursField }, run: (p) => client.getUserOverallReport(p as never) },
+  { name: 'get_user_conversation_history', title: 'Get User Conversation History', description: "List a user's conversation history (Plus/Pro)", inputSchema: { ...reportDateSchema, ...userField, ...officeHoursField, status: z.enum(['active', 'pending', 'closed']).optional().describe('Status filter'), page: z.coerce.number().optional().describe('Page number'), sortField: z.enum(['number', 'repliesSent', 'responseTime', 'resolveTime']).optional().describe('Sort field'), sortOrder: z.enum(['ASC', 'DESC']).optional().describe('Sort order') }, run: (p) => client.getUserConversationHistory(p as never) },
+  { name: 'get_user_customers_helped', title: 'Get User Customers Helped', description: 'Customers helped by a user over time (Plus/Pro)', inputSchema: { ...reportDateSchema, ...userField, ...viewByField }, run: (p) => client.getUserCustomersHelped(p as never) },
+  { name: 'get_user_drilldown', title: 'Get User Drilldown', description: "Drill down into a user's conversations (Plus/Pro)", inputSchema: { ...reportDateSchema, ...userField, ...drilldownFields }, run: (p) => client.getUserDrilldown(p as never) },
+  { name: 'get_user_happiness_report', title: 'Get User Happiness', description: 'Customer satisfaction scores for a user (Plus/Pro)', inputSchema: { ...reportDateSchema, ...userField }, run: (p) => client.getUserHappinessReport(p as never) },
+  { name: 'get_user_happiness_ratings', title: 'Get User Happiness Ratings', description: "List a user's individual happiness ratings (Plus/Pro)", inputSchema: { ...reportDateSchema, ...userField, page: z.coerce.number().optional().describe('Page number'), sortField: z.enum(['number', 'modifiedAt', 'rating']).optional().describe('Sort field'), sortOrder: z.enum(['ASC', 'DESC']).optional().describe('Sort order'), rating: z.enum(['great', 'ok', 'not-good', 'all']).optional().describe('Filter by rating') }, run: (p) => client.getUserHappinessRatings(p as never) },
+  { name: 'get_user_replies', title: 'Get User Replies', description: 'Replies sent by a user over time (Plus/Pro)', inputSchema: { ...reportDateSchema, ...userField, ...viewByField }, run: (p) => client.getUserReplies(p as never) },
+  { name: 'get_user_resolutions', title: 'Get User Resolutions', description: 'Conversations resolved by a user over time (Plus/Pro)', inputSchema: { ...reportDateSchema, ...userField, ...viewByField }, run: (p) => client.getUserResolutions(p as never) },
+  { name: 'get_user_chat_report', title: 'Get User/Team Chat', description: 'User/Team chat metrics (Plus/Pro)', inputSchema: { ...reportDateSchema, ...userField, ...officeHoursField }, run: (p) => client.getUserChatReport(p as never) },
+  // Channel
+  { name: 'get_chat_report', title: 'Get Chat Report', description: 'Chat channel report (Plus/Pro)', inputSchema: { ...reportDateSchema, ...officeHoursField }, run: (p) => client.getChatReport(p as never) },
+  { name: 'get_email_report', title: 'Get Email Report', description: 'Email channel report (Plus/Pro)', inputSchema: { ...reportDateSchema, ...officeHoursField }, run: (p) => client.getEmailReport(p as never) },
+  { name: 'get_phone_report', title: 'Get Phone Report', description: 'Phone channel report (Plus/Pro)', inputSchema: { ...reportDateSchema, ...officeHoursField }, run: (p) => client.getPhoneReport(p as never) },
+];
+
+for (const tool of EXPANDED_REPORT_TOOLS) {
+  rememberTool(tool.name, tool.description);
+  server.registerTool(
+    tool.name,
+    {
+      title: tool.title,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+      annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+    },
+    async (params) => jsonResponse(await tool.run(params as Record<string, unknown>))
+  );
+}
+
 rememberTool('search_by_customer', "Find conversations involving a customer by email. Searches primary email and domain (for CC'd/teammate tickets). Results deduplicated and capped by maxResults (default 25). Use date filters to narrow large result sets.");
 server.registerTool(
   'search_by_customer',
