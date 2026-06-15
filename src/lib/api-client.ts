@@ -9,6 +9,10 @@ import type {
   DraftConversationStatus,
   Webhook,
   WebhookInput,
+  MailboxFolder,
+  RoutingConfig,
+  RoutingConfigInput,
+  SystemUser,
   Tag,
   Workflow,
   Mailbox,
@@ -835,6 +839,53 @@ export class HelpScoutClient {
 
   async deleteWebhook(webhookId: number) {
     await this.request<void>('DELETE', `/webhooks/${webhookId}`);
+  }
+
+  // Inbox folders + routing
+  async listMailboxFolders(mailboxId: number, page?: number) {
+    const response = await this.request<PaginatedResponse<{ folders: MailboxFolder[] }>>(
+      'GET',
+      `/mailboxes/${mailboxId}/folders`,
+      { params: page ? { page } : undefined }
+    );
+    return {
+      folders: response._embedded?.folders || [],
+      page: response.page,
+    };
+  }
+
+  async getRoutingConfig(mailboxId: number) {
+    return this.request<RoutingConfig>('GET', `/mailboxes/${mailboxId}/routing`);
+  }
+
+  // PUT replaces all fields; GET-then-merge so a partial update doesn't wipe others.
+  async updateRoutingConfig(mailboxId: number, data: Partial<RoutingConfigInput>) {
+    const existing = await this.getRoutingConfig(mailboxId);
+    const merged: RoutingConfigInput = {
+      state: data.state ?? existing.state,
+      assignmentLimit: data.assignmentLimit ?? existing.assignmentLimit,
+      assignmentMethod: data.assignmentMethod ?? existing.assignmentMethod,
+      userIds: data.userIds ?? existing.userIds,
+    };
+    await this.request<void>('PUT', `/mailboxes/${mailboxId}/routing`, { body: merged });
+  }
+
+  // System Users (v3 API) — identifies AI agents (type === 'system_user').
+  // NOTE: the v3 list embeds under the underscored key `system_users`.
+  async listSystemUsers(page?: number) {
+    const response = await this.request<PaginatedResponse<{ system_users: SystemUser[] }>>(
+      'GET',
+      '/system-users',
+      { params: page ? { page } : undefined, version: 'v3' }
+    );
+    return {
+      systemUsers: response._embedded?.system_users || [],
+      page: response.page,
+    };
+  }
+
+  async getSystemUser(systemUserId: number) {
+    return this.request<SystemUser>('GET', `/system-users/${systemUserId}`, { version: 'v3' });
   }
 
   // Tags

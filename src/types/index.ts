@@ -246,6 +246,58 @@ export interface WebhookInput {
   mailboxIds?: number[];
 }
 
+export interface MailboxFolder {
+  id: number;
+  type: string;
+  name: string;
+  totalCount: number;
+  activeCount: number;
+  userId?: number;
+  updatedAt: string;
+}
+
+export type RoutingState = 'enabled' | 'disabled';
+export type RoutingAssignmentMethod = 'round_robin' | 'balanced';
+
+export interface RoutingConfigRotationEntry {
+  userId: number;
+  conversationsCount: number;
+  eligible: boolean;
+  reason?: string;
+}
+
+export interface RoutingConfig {
+  state: RoutingState;
+  assignmentLimit: number;
+  assignmentMethod: RoutingAssignmentMethod;
+  userIds: number[];
+  rotation?: RoutingConfigRotationEntry[];
+}
+
+// PUT body — the four writable fields (rotation is read-only/computed).
+export interface RoutingConfigInput {
+  state: RoutingState;
+  assignmentLimit: number;
+  assignmentMethod: RoutingAssignmentMethod;
+  userIds: number[];
+}
+
+// System Users are the v3 actor type for AI agents (type === 'system_user').
+export interface SystemUser {
+  id: number;
+  type: 'system_user';
+  firstName?: string;
+  lastName?: string;
+  initials?: string;
+  email?: string;
+  mention?: string;
+  timezone?: string;
+  role?: string;
+  photoUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface User {
   id: number;
   firstName?: string;

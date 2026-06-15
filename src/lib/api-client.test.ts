@@ -139,6 +139,66 @@ describe('HelpScoutClient', () => {
     expect(address.city).toBe('Dallas');
   });
 
+  it('lists inbox folders for a mailbox', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        _embedded: {
+          folders: [
+            { id: 1, type: 'mytickets', name: 'Mine', totalCount: 3, activeCount: 2, updatedAt: '2026-06-01T00:00:00Z' },
+          ],
+        },
+        page: { size: 1, totalElements: 1, totalPages: 1, number: 1 },
+      })
+    );
+
+    const result = await client.listMailboxFolders(99);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v2/mailboxes/99/folders');
+    expect(result.folders[0].name).toBe('Mine');
+  });
+
+  it('merges existing routing config on update (PUT replaces all fields)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        Response.json({
+          state: 'enabled',
+          assignmentLimit: 10,
+          assignmentMethod: 'round_robin',
+          userIds: [1, 2],
+        })
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await client.updateRoutingConfig(99, { state: 'disabled' });
+
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      'https://api.helpscout.net/v2/mailboxes/99/routing',
+      expect.objectContaining({
+        method: 'PUT',
+        body: JSON.stringify({
+          state: 'disabled',
+          assignmentLimit: 10,
+          assignmentMethod: 'round_robin',
+          userIds: [1, 2],
+        }),
+      })
+    );
+  });
+
+  it('lists system users from the v3 path with the underscored system_users key', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        _embedded: { system_users: [{ id: 0, type: 'system_user', firstName: 'AI', lastName: 'Agent' }] },
+        page: { size: 1, totalElements: 1, totalPages: 1, number: 1 },
+      })
+    );
+
+    const result = await client.listSystemUsers();
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v3/system-users');
+    expect(result.systemUsers[0].type).toBe('system_user');
+  });
+
   it('reads the webhooks embedded key on listWebhooks', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({
