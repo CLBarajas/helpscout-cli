@@ -617,3 +617,303 @@ export interface HappinessRatingsParams extends ReportParams {
   sortOrder?: 'ASC' | 'DESC';
   rating?: 'great' | 'ok' | 'all' | 'not-good';
 }
+
+// ---- Expanded report params (Company + Conversations families) ----
+
+// Drilldown reports paginate and do NOT accept previousStart/previousEnd/viewBy.
+export interface ReportDrilldownParams extends ReportParams {
+  page?: number;
+  rows?: number; // max 50
+}
+
+export interface CompanyDrilldownParams extends ReportDrilldownParams {
+  range?:
+    | 'replies'
+    | 'firstReplyResolved'
+    | 'resolved'
+    | 'responseTime'
+    | 'firstResponseTime'
+    | 'handleTime';
+  rangeId?: number;
+}
+
+export interface FieldDrilldownParams extends ReportDrilldownParams {
+  field: 'tagid' | 'replyid' | 'workflowid' | 'customerid';
+  fieldid: number;
+}
+
+// Shared drilldown response envelope (identical shape across drilldown endpoints).
+export interface ReportDrilldownConversation {
+  id: number;
+  number: number;
+  type: string;
+  mailboxid: number;
+  subject: string;
+  status: string;
+  threadCount: number;
+  preview: string;
+  customerName: string;
+  customerEmail: string;
+  modifiedAt: string;
+  assignedid: number;
+  assignedName: string;
+  tags: Array<{ id: number; name: string }>;
+  attachments: boolean;
+}
+
+export interface ReportDrilldown {
+  conversations: {
+    pages: number;
+    page: number;
+    count: number;
+    results: ReportDrilldownConversation[];
+  };
+}
+
+export interface CustomersHelpedDataPoint {
+  date: string;
+  customers: number;
+}
+export interface CustomersHelpedReport {
+  current: CustomersHelpedDataPoint[];
+  previous?: CustomersHelpedDataPoint[];
+}
+
+export interface VolumeByChannelDataPoint {
+  date: string;
+  chat: number;
+  email: number;
+  phone: number;
+}
+export interface VolumesByChannelReport {
+  current: VolumeByChannelDataPoint[];
+  previous?: VolumeByChannelDataPoint[];
+}
+
+// Busiest time-of-day is a flat array of slots (day 1=Mon..7=Sun, hour 0-23).
+export type BusyTimesReport = Array<{ day: number; hour: number; count: number }>;
+
+export interface NewConversationsDataPoint {
+  start: string;
+  count: number;
+}
+export interface NewConversationsReport {
+  current: NewConversationsDataPoint[];
+  previous?: NewConversationsDataPoint[];
+}
+
+export interface ReceivedMessagesDataPoint {
+  start: string;
+  count: number;
+}
+export interface ReceivedMessagesReport {
+  current: ReceivedMessagesDataPoint[];
+  previous?: ReceivedMessagesDataPoint[];
+}
+
+// ---- Productivity + Docs families ----
+
+export interface RepliesSentDataPoint {
+  date: string;
+  replies: number;
+}
+export interface RepliesSentReport {
+  current: RepliesSentDataPoint[];
+  previous?: RepliesSentDataPoint[];
+}
+
+// Resolution Time / Response Time reuse TimeSeriesDataPoint (value key `time`, ms).
+export interface ResolutionTimeReport {
+  current: TimeSeriesDataPoint[];
+  previous?: TimeSeriesDataPoint[];
+}
+export interface ResponseTimeReport {
+  current: TimeSeriesDataPoint[];
+  previous?: TimeSeriesDataPoint[];
+}
+
+export interface ResolvedDataPoint {
+  date: string;
+  resolved: number;
+}
+export interface ResolvedReport {
+  current: ResolvedDataPoint[];
+  previous?: ResolvedDataPoint[];
+}
+
+// Docs Overall — aggregate; only `sites` filter beyond the date range.
+export interface DocsReportParams {
+  start: string;
+  end: string;
+  previousStart?: string;
+  previousEnd?: string;
+  sites?: string; // comma-separated Docs site IDs
+}
+export interface DocsReport {
+  current: Record<string, number>;
+  previous?: Record<string, number>;
+  deltas?: Record<string, number>;
+  popularSearches?: Array<{ term: string; count: number }>;
+  failedSearches?: Array<{ term: string; count: number }>;
+  topArticles?: Array<{ id: string; name: string; count: number }>;
+  topCategories?: Array<{ id: string; name: string; count: number }>;
+}
+
+// ---- User/Team + Channel families ----
+
+// User/Team reports require a `user` id (a team id may be passed in its place).
+export interface UserReportParams extends ReportParams {
+  user: number;
+  officeHours?: boolean;
+}
+export interface UserTimeSeriesReportParams extends UserReportParams {
+  viewBy?: 'day' | 'week' | 'month';
+}
+export interface UserConversationHistoryParams extends UserReportParams {
+  status?: 'active' | 'pending' | 'closed';
+  page?: number;
+  sortField?: 'number' | 'repliesSent' | 'responseTime' | 'resolveTime';
+  sortOrder?: 'ASC' | 'DESC';
+}
+export interface UserDrilldownParams extends Omit<UserReportParams, 'officeHours'> {
+  page?: number;
+  rows?: number;
+}
+export interface UserHappinessRatingsParams extends UserReportParams {
+  page?: number;
+  sortField?: 'number' | 'modifiedAt' | 'rating';
+  sortOrder?: 'ASC' | 'DESC';
+  rating?: 'great' | 'ok' | 'all' | 'not-good';
+}
+// Channel reports: shared filters + officeHours, NO types param.
+export interface ChannelReportParams extends Omit<ReportParams, 'types'> {
+  officeHours?: boolean;
+}
+// User/Team Chat report: user-scoped, no types/folders.
+export interface UserChatReportParams extends Omit<ReportParams, 'types' | 'folders'> {
+  user: number;
+  officeHours?: boolean;
+}
+
+export interface UserReportUser {
+  id: number;
+  name: string;
+  photoUrl?: string;
+  totalCustomersHelped?: number;
+}
+export interface UserOverallReport {
+  filterTags?: Array<{ id: number; name: string }>;
+  user: UserReportUser;
+  current: Record<string, number | string>;
+  previous?: Record<string, number | string>;
+  deltas?: Record<string, number>;
+}
+export interface UserTimeSeriesDataPoint {
+  date: string;
+  customers?: number;
+  replies?: number;
+  resolved?: number;
+}
+export interface UserTimeSeriesReport {
+  current: UserTimeSeriesDataPoint[];
+  previous?: UserTimeSeriesDataPoint[];
+}
+export interface UserConversationHistoryResult {
+  id: number;
+  number: number;
+  status: string;
+  customers: number;
+  firstResponseTime: number;
+  responseTime: number;
+  resolveTime: number;
+  repliesSent: number;
+  avgHandleTime: number;
+}
+export interface UserConversationHistoryReport {
+  page: number;
+  pages: number;
+  count: number;
+  results: UserConversationHistoryResult[];
+}
+export interface UserDrilldownConversation {
+  id: number;
+  number: number;
+  type: string;
+  mailboxid: number;
+  subject: string;
+  status: string;
+  threadCount: number;
+  preview: string;
+  customerName: string;
+  customerEmail: string;
+  modifiedAt: string;
+  assignedid: number;
+  assignedName: string;
+  tags: string[];
+  attachments: boolean;
+  waitingSince?: string;
+  waitingSinceType?: string;
+}
+export interface UserDrilldownReport {
+  conversations: {
+    count: number;
+    page: number;
+    pages: number;
+    results: UserDrilldownConversation[];
+  };
+}
+export interface UserHappinessReport {
+  filterTags?: Array<{ id: number; name: string }>;
+  current: HappinessReportStats;
+  previous?: HappinessReportStats;
+  deltas?: Record<string, number>;
+}
+export type UserHappinessRatingsReport = HappinessRatingsReport;
+
+export interface ChatReport {
+  current: {
+    startDate: string;
+    endDate: string;
+    volume: {
+      chatConversations: number;
+      completedChats: number;
+      missedChats: number;
+      chatsPerDay: number;
+    };
+    responses: { waitTime: number; responseTime: number };
+    resolutions: { messagesPerChat: number; duration: number };
+  };
+  previous?: ChatReport['current'];
+  deltas?: Record<string, number>;
+}
+export interface EmailReport {
+  filterTags?: Array<{ id: number; name: string }>;
+  current: Record<string, number | string>;
+  previous?: Record<string, number | string>;
+  deltas?: Record<string, number>;
+}
+export interface PhoneReportStats {
+  startDate: string;
+  endDate: string;
+  phoneConversations: number;
+  phoneCallsCreated: number;
+  customers: number;
+}
+export interface PhoneReport {
+  current: PhoneReportStats;
+  previous?: PhoneReportStats;
+  deltas?: Record<string, number>;
+  users?: Array<{ id: number; name: string; current: PhoneReportStats; previous?: PhoneReportStats }>;
+}
+export interface UserChatReportStats {
+  newConversations: number;
+  messagesPerChat: number;
+  responseTime: number;
+  waitTime: number;
+  duration: number;
+}
+export interface UserChatReport {
+  current: UserChatReportStats;
+  previous?: UserChatReportStats;
+  deltas?: Record<string, number>;
+}

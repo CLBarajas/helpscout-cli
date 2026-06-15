@@ -38,6 +38,38 @@ import type {
   ProductivityReportParams,
   TimeSeriesReportParams,
   HappinessRatingsParams,
+  ReportDrilldownParams,
+  CompanyDrilldownParams,
+  FieldDrilldownParams,
+  ReportDrilldown,
+  CustomersHelpedReport,
+  VolumesByChannelReport,
+  BusyTimesReport,
+  NewConversationsReport,
+  ReceivedMessagesReport,
+  RepliesSentReport,
+  ResolutionTimeReport,
+  ResolvedReport,
+  ResponseTimeReport,
+  DocsReport,
+  DocsReportParams,
+  UserReportParams,
+  UserTimeSeriesReportParams,
+  UserConversationHistoryParams,
+  UserDrilldownParams,
+  UserHappinessRatingsParams,
+  ChannelReportParams,
+  UserChatReportParams,
+  UserOverallReport,
+  UserTimeSeriesReport,
+  UserConversationHistoryReport,
+  UserDrilldownReport,
+  UserHappinessReport,
+  UserHappinessRatingsReport,
+  ChatReport,
+  EmailReport,
+  PhoneReport,
+  UserChatReport,
 } from '../types/index.js';
 
 const API_ROOT = 'https://api.helpscout.net';
@@ -1468,6 +1500,113 @@ export class HelpScoutClient {
     return this.request<HappinessRatingsReport>('GET', '/reports/happiness/ratings', {
       params: params as unknown as Record<string, string | number | boolean | undefined>,
     });
+  }
+
+  // Helper for the expanded GET report endpoints (all share the params-cast shape).
+  private getReport<T>(path: string, params: object): Promise<T> {
+    return this.request<T>('GET', path, {
+      params: params as unknown as Record<string, string | number | boolean | undefined>,
+    });
+  }
+
+  // --- Company family ---
+  async getCompanyCustomersHelpedReport(params: TimeSeriesReportParams) {
+    return this.getReport<CustomersHelpedReport>('/reports/company/customers-helped', params);
+  }
+  async getCompanyDrilldownReport(params: CompanyDrilldownParams) {
+    return this.getReport<ReportDrilldown>('/reports/company/drilldown', params);
+  }
+
+  // --- Conversations family ---
+  async getVolumesByChannelReport(params: TimeSeriesReportParams) {
+    return this.getReport<VolumesByChannelReport>(
+      '/reports/conversations/volume-by-channel',
+      params
+    );
+  }
+  async getBusyTimesReport(params: ReportParams) {
+    return this.getReport<BusyTimesReport>('/reports/conversations/busy-times', params);
+  }
+  async getConversationsDrilldownReport(params: ReportDrilldownParams) {
+    return this.getReport<ReportDrilldown>('/reports/conversations/drilldown', params);
+  }
+  async getConversationsFieldDrilldownReport(params: FieldDrilldownParams) {
+    return this.getReport<ReportDrilldown>('/reports/conversations/fields-drilldown', params);
+  }
+  async getNewConversationsReport(params: TimeSeriesReportParams) {
+    return this.getReport<NewConversationsReport>('/reports/conversations/new', params);
+  }
+  async getNewConversationsDrilldownReport(params: ReportDrilldownParams) {
+    return this.getReport<ReportDrilldown>('/reports/conversations/new-drilldown', params);
+  }
+  async getReceivedMessagesReport(params: TimeSeriesReportParams) {
+    return this.getReport<ReceivedMessagesReport>(
+      '/reports/conversations/received-messages',
+      params
+    );
+  }
+
+  // --- Productivity family ---
+  async getRepliesSentReport(params: TimeSeriesReportParams) {
+    return this.getReport<RepliesSentReport>('/reports/productivity/replies-sent', params);
+  }
+  async getResolutionTimeReport(params: TimeSeriesReportParams) {
+    return this.getReport<ResolutionTimeReport>('/reports/productivity/resolution-time', params);
+  }
+  async getResolvedReport(params: TimeSeriesReportParams) {
+    return this.getReport<ResolvedReport>('/reports/productivity/resolved', params);
+  }
+  async getResponseTimeReport(params: TimeSeriesReportParams) {
+    return this.getReport<ResponseTimeReport>('/reports/productivity/response-time', params);
+  }
+
+  // --- Docs ---
+  async getDocsReport(params: DocsReportParams) {
+    return this.getReport<DocsReport>('/reports/docs', params);
+  }
+
+  // --- User/Team family (require `user`; a team id may be passed instead) ---
+  async getUserOverallReport(params: UserReportParams) {
+    return this.getReport<UserOverallReport>('/reports/user', params);
+  }
+  async getUserConversationHistory(params: UserConversationHistoryParams) {
+    return this.getReport<UserConversationHistoryReport>(
+      '/reports/user/conversation-history',
+      params
+    );
+  }
+  async getUserCustomersHelped(params: UserTimeSeriesReportParams) {
+    return this.getReport<UserTimeSeriesReport>('/reports/user/customers-helped', params);
+  }
+  async getUserDrilldown(params: UserDrilldownParams) {
+    return this.getReport<UserDrilldownReport>('/reports/user/drilldown', params);
+  }
+  async getUserHappinessReport(params: UserReportParams) {
+    return this.getReport<UserHappinessReport>('/reports/user/happiness', params);
+  }
+  // NOTE: the drilldown lives at /reports/user/ratings, not /happiness-drilldown.
+  async getUserHappinessRatings(params: UserHappinessRatingsParams) {
+    return this.getReport<UserHappinessRatingsReport>('/reports/user/ratings', params);
+  }
+  async getUserReplies(params: UserTimeSeriesReportParams) {
+    return this.getReport<UserTimeSeriesReport>('/reports/user/replies', params);
+  }
+  async getUserResolutions(params: UserTimeSeriesReportParams) {
+    return this.getReport<UserTimeSeriesReport>('/reports/user/resolutions', params);
+  }
+  async getUserChatReport(params: UserChatReportParams) {
+    return this.getReport<UserChatReport>('/reports/user/chat', params);
+  }
+
+  // --- Channel reports (no `user`, no `types`) ---
+  async getChatReport(params: ChannelReportParams) {
+    return this.getReport<ChatReport>('/reports/chat', params);
+  }
+  async getEmailReport(params: ChannelReportParams) {
+    return this.getReport<EmailReport>('/reports/email', params);
+  }
+  async getPhoneReport(params: ChannelReportParams) {
+    return this.getReport<PhoneReport>('/reports/phone', params);
   }
 }
 

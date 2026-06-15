@@ -365,6 +365,109 @@ describe('HelpScoutClient', () => {
     expect(rating.rating).toBe('Great');
   });
 
+  it('hits replies-sent with officeHours + viewBy', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ current: [{ date: '2026-06-01T00:00:00Z', replies: 42 }] })
+    );
+
+    const report = await client.getRepliesSentReport({
+      start: '2026-06-01T00:00:00Z',
+      end: '2026-06-30T23:59:59Z',
+      officeHours: true,
+      viewBy: 'week',
+    });
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain('https://api.helpscout.net/v2/reports/productivity/replies-sent');
+    expect(url).toContain('officeHours=true');
+    expect(url).toContain('viewBy=week');
+    expect(report.current[0].replies).toBe(42);
+  });
+
+  it('hits the docs report with sites and omits inbox-only filters', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ current: { searches: 100 }, topArticles: [{ id: 'a1', name: 'Start', count: 5 }] })
+    );
+
+    await client.getDocsReport({
+      start: '2026-06-01T00:00:00Z',
+      end: '2026-06-30T23:59:59Z',
+      sites: '123,456',
+    });
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain('https://api.helpscout.net/v2/reports/docs');
+    expect(url).toContain('sites=123%2C456');
+    expect(url).not.toContain('mailboxes=');
+    expect(url).not.toContain('viewBy=');
+  });
+
+  it('hits the fields-drilldown path with field + fieldid', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ conversations: { pages: 1, page: 1, count: 0, results: [] } })
+    );
+
+    await client.getConversationsFieldDrilldownReport({
+      start: '2026-06-01T00:00:00Z',
+      end: '2026-06-30T23:59:59Z',
+      field: 'tagid',
+      fieldid: 99787,
+    });
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain('https://api.helpscout.net/v2/reports/conversations/fields-drilldown');
+    expect(url).toContain('field=tagid');
+    expect(url).toContain('fieldid=99787');
+  });
+
+  it('sends the required user param on the user resolutions report', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ current: [{ date: '2026-06-01T00:00:00Z', resolved: 12 }] })
+    );
+
+    const report = await client.getUserResolutions({
+      user: 42,
+      start: '2026-06-01T00:00:00Z',
+      end: '2026-06-08T00:00:00Z',
+      viewBy: 'day',
+    });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.pathname).toBe('/v2/reports/user/resolutions');
+    expect(url.searchParams.get('user')).toBe('42');
+    expect(report.current[0].resolved).toBe(12);
+  });
+
+  it('hits /reports/user/ratings (not happiness-drilldown) for the user happiness drilldown', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ page: 1, pages: 1, count: 0, results: [] }));
+
+    await client.getUserHappinessRatings({
+      user: 7,
+      start: '2026-06-01T00:00:00Z',
+      end: '2026-06-08T00:00:00Z',
+      rating: 'great',
+    });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.pathname).toBe('/v2/reports/user/ratings');
+    expect(url.searchParams.get('user')).toBe('7');
+  });
+
+  it('requests the chat channel report with no user param', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ current: { startDate: '', endDate: '' } }));
+
+    await client.getChatReport({
+      start: '2026-06-01T00:00:00Z',
+      end: '2026-06-08T00:00:00Z',
+      officeHours: true,
+    });
+
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(url.pathname).toBe('/v2/reports/chat');
+    expect(url.searchParams.get('officeHours')).toBe('true');
+    expect(url.searchParams.has('user')).toBe(false);
+  });
+
   it('lists inbox folders for a mailbox', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({
