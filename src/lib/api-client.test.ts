@@ -273,6 +273,56 @@ describe('HelpScoutClient', () => {
     expect(address.city).toBe('Dallas');
   });
 
+  it('creates a user via POST /users and parses the Resource-ID header', async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(null, {
+        status: 201,
+        headers: { 'Resource-ID': '4', Location: 'https://api.helpscout.net/v2/users/4' },
+      })
+    );
+
+    const result = await client.createUser({
+      firstName: 'Jane',
+      lastName: 'Doe',
+      email: 'jane@example.com',
+      role: 'user',
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.helpscout.net/v2/users',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          firstName: 'Jane',
+          lastName: 'Doe',
+          email: 'jane@example.com',
+          role: 'user',
+        }),
+      })
+    );
+    expect(result.id).toBe(4);
+  });
+
+  it('deletes a user via DELETE /users/{id}', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await client.deleteUser(4);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v2/users/4');
+    expect(fetchMock.mock.calls[0][1]).toEqual(expect.objectContaining({ method: 'DELETE' }));
+  });
+
+  it('gets a single satisfaction rating by id', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ id: 77, rating: 'Great', ticketId: 123, createdAt: '2026-06-01T00:00:00Z' })
+    );
+
+    const rating = await client.getSatisfactionRating(77);
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v2/ratings/77');
+    expect(rating.rating).toBe('Great');
+  });
+
   it('lists inbox folders for a mailbox', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({

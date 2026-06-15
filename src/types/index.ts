@@ -344,6 +344,45 @@ export interface ThreadScheduleInput {
   sendAsCreator?: boolean;
 }
 
+// Create User (POST /v2/users). role enum is exactly: admin | user | light user.
+export type UserRole = 'admin' | 'user' | 'light user';
+
+export interface CreateUserMailboxAccess {
+  id: number; // inbox id
+  emailAccess?: boolean;
+}
+
+export interface CreateUserInput {
+  firstName: string;
+  lastName: string;
+  email: string;
+  role: UserRole;
+  timezone?: string;
+  jobTitle?: string;
+  phone?: string;
+  sendInvite?: boolean;
+  mailboxes?: CreateUserMailboxAccess[];
+}
+
+// Get Satisfaction Rating (GET /v2/ratings/{ratingId}) — a single rating object,
+// distinct from the /reports/happiness/ratings aggregate report.
+export interface Rating {
+  id: number;
+  rating: string; // "Great" | "Okay" | "Bad"
+  comments?: string;
+  customer?: {
+    id?: number;
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+  };
+  ticketId?: number;
+  threadId?: number;
+  mailbox?: { id: number; name?: string };
+  createdAt: string;
+  modifiedAt?: string;
+}
+
 export interface User {
   id: number;
   firstName?: string;

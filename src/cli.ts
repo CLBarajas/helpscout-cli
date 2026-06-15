@@ -13,6 +13,7 @@ import { createTeamsCommand } from './commands/teams.js';
 import { createSystemUsersCommand } from './commands/system-users.js';
 import { createSavedRepliesCommand } from './commands/saved-replies.js';
 import { createReportsCommand } from './commands/reports.js';
+import { createRatingsCommand } from './commands/ratings.js';
 import { createWebhooksCommand } from './commands/webhooks.js';
 import { createMcpCommand } from './commands/mcp.js';
 
@@ -49,6 +50,7 @@ program.addCommand(createTeamsCommand());
 program.addCommand(createSystemUsersCommand());
 program.addCommand(createSavedRepliesCommand());
 program.addCommand(createReportsCommand());
+program.addCommand(createRatingsCommand());
 program.addCommand(createWebhooksCommand());
 program.addCommand(createMcpCommand());
 

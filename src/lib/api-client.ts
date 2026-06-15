@@ -19,6 +19,8 @@ import type {
   ThreadAttachmentInput,
   ThreadOriginalSource,
   ThreadScheduleInput,
+  CreateUserInput,
+  Rating,
   Tag,
   Workflow,
   Mailbox,
@@ -1183,6 +1185,20 @@ export class HelpScoutClient {
       timezone: string;
       photoUrl?: string;
     }>('GET', '/users/me');
+  }
+
+  async createUser(data: CreateUserInput): Promise<{ id: number; url: string }> {
+    return this.requestForCreation('/users', data);
+  }
+
+  async deleteUser(userId: number) {
+    await this.request<void>('DELETE', `/users/${userId}`);
+  }
+
+  // Ratings — a single satisfaction rating by id (distinct from the
+  // /reports/happiness/ratings aggregate report).
+  async getSatisfactionRating(ratingId: number) {
+    return this.request<Rating>('GET', `/ratings/${ratingId}`);
   }
 
   // Teams
