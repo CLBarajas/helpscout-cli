@@ -2291,6 +2291,115 @@ server.registerTool(
   async (params) => jsonResponse(await client.getHappinessRatings(params))
 );
 
+// --- Customer chat handles ---
+rememberTool('list_customer_chats', 'List chat handles for a customer');
+server.registerTool('list_customer_chats', { title: 'List Customer Chats', description: 'List chat handles for a customer', inputSchema: { customerId: z.coerce.number().describe('Customer ID') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ customerId }) => jsonResponse(await client.listCustomerChats(customerId)));
+
+rememberTool('create_customer_chat', 'Add a chat handle to a customer');
+server.registerTool('create_customer_chat', { title: 'Create Customer Chat', description: 'Add a chat handle to a customer', inputSchema: { customerId: z.coerce.number().describe('Customer ID'), type: z.string().describe('Chat type (e.g. aim, gtalk, skype, other)'), value: z.string().describe('Chat handle') }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ customerId, type, value }) => { await client.createCustomerChat(customerId, { type, value }); return jsonResponse({ success: true }); });
+
+rememberTool('update_customer_chat', 'Update a customer chat handle');
+server.registerTool('update_customer_chat', { title: 'Update Customer Chat', description: 'Update a customer chat handle', inputSchema: { customerId: z.coerce.number().describe('Customer ID'), chatId: z.coerce.number().describe('Chat handle ID'), type: z.string().optional().describe('Chat type'), value: z.string().optional().describe('Chat handle') }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ customerId, chatId, type, value }) => { await client.updateCustomerChat(customerId, chatId, { type, value }); return jsonResponse({ success: true }); });
+
+rememberTool('delete_customer_chat', 'Delete a customer chat handle');
+server.registerTool('delete_customer_chat', { title: 'Delete Customer Chat', description: 'Delete a customer chat handle', inputSchema: { customerId: z.coerce.number().describe('Customer ID'), chatId: z.coerce.number().describe('Chat handle ID') }, annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS }, async ({ customerId, chatId }) => { await client.deleteCustomerChat(customerId, chatId); return jsonResponse({ success: true }); });
+
+// --- Customer social profiles ---
+rememberTool('list_customer_social_profiles', 'List social profiles for a customer');
+server.registerTool('list_customer_social_profiles', { title: 'List Customer Social Profiles', description: 'List social profiles for a customer', inputSchema: { customerId: z.coerce.number().describe('Customer ID') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ customerId }) => jsonResponse(await client.listCustomerSocialProfiles(customerId)));
+
+rememberTool('create_customer_social_profile', 'Add a social profile to a customer');
+server.registerTool('create_customer_social_profile', { title: 'Create Customer Social Profile', description: 'Add a social profile to a customer', inputSchema: { customerId: z.coerce.number().describe('Customer ID'), type: z.string().describe('Profile type (e.g. twitter, facebook, other)'), value: z.string().describe('Profile URL or handle') }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ customerId, type, value }) => { await client.createCustomerSocialProfile(customerId, { type, value }); return jsonResponse({ success: true }); });
+
+rememberTool('update_customer_social_profile', 'Update a customer social profile');
+server.registerTool('update_customer_social_profile', { title: 'Update Customer Social Profile', description: 'Update a customer social profile', inputSchema: { customerId: z.coerce.number().describe('Customer ID'), socialProfileId: z.coerce.number().describe('Social profile ID'), type: z.string().optional().describe('Profile type'), value: z.string().optional().describe('Profile URL or handle') }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ customerId, socialProfileId, type, value }) => { await client.updateCustomerSocialProfile(customerId, socialProfileId, { type, value }); return jsonResponse({ success: true }); });
+
+rememberTool('delete_customer_social_profile', 'Delete a customer social profile');
+server.registerTool('delete_customer_social_profile', { title: 'Delete Customer Social Profile', description: 'Delete a customer social profile', inputSchema: { customerId: z.coerce.number().describe('Customer ID'), socialProfileId: z.coerce.number().describe('Social profile ID') }, annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS }, async ({ customerId, socialProfileId }) => { await client.deleteCustomerSocialProfile(customerId, socialProfileId); return jsonResponse({ success: true }); });
+
+// --- Customer websites ---
+rememberTool('list_customer_websites', 'List websites for a customer');
+server.registerTool('list_customer_websites', { title: 'List Customer Websites', description: 'List websites for a customer', inputSchema: { customerId: z.coerce.number().describe('Customer ID') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ customerId }) => jsonResponse(await client.listCustomerWebsites(customerId)));
+
+rememberTool('create_customer_website', 'Add a website to a customer');
+server.registerTool('create_customer_website', { title: 'Create Customer Website', description: 'Add a website to a customer', inputSchema: { customerId: z.coerce.number().describe('Customer ID'), value: z.string().describe('Website URL') }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ customerId, value }) => { await client.createCustomerWebsite(customerId, { value }); return jsonResponse({ success: true }); });
+
+rememberTool('update_customer_website', 'Update a customer website');
+server.registerTool('update_customer_website', { title: 'Update Customer Website', description: 'Update a customer website', inputSchema: { customerId: z.coerce.number().describe('Customer ID'), websiteId: z.coerce.number().describe('Website ID'), value: z.string().describe('Website URL') }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ customerId, websiteId, value }) => { await client.updateCustomerWebsite(customerId, websiteId, { value }); return jsonResponse({ success: true }); });
+
+rememberTool('delete_customer_website', 'Delete a customer website');
+server.registerTool('delete_customer_website', { title: 'Delete Customer Website', description: 'Delete a customer website', inputSchema: { customerId: z.coerce.number().describe('Customer ID'), websiteId: z.coerce.number().describe('Website ID') }, annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS }, async ({ customerId, websiteId }) => { await client.deleteCustomerWebsite(customerId, websiteId); return jsonResponse({ success: true }); });
+
+// --- Customer address (single per customer) ---
+rememberTool('get_customer_address', 'Get a customer address');
+server.registerTool('get_customer_address', { title: 'Get Customer Address', description: 'Get a customer address', inputSchema: { customerId: z.coerce.number().describe('Customer ID') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ customerId }) => jsonResponse(await client.getCustomerAddress(customerId)));
+
+const addressInputSchema = {
+  city: z.string().optional().describe('City'),
+  state: z.string().optional().describe('State'),
+  postalCode: z.string().optional().describe('Postal code'),
+  country: z.string().optional().describe('Country'),
+  lines: z.array(z.string()).optional().describe('Address lines'),
+};
+rememberTool('create_customer_address', 'Add an address to a customer');
+server.registerTool('create_customer_address', { title: 'Create Customer Address', description: 'Add an address to a customer', inputSchema: { customerId: z.coerce.number().describe('Customer ID'), ...addressInputSchema }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ customerId, ...data }) => { await client.createCustomerAddress(customerId, data); return jsonResponse({ success: true }); });
+
+rememberTool('update_customer_address', 'Update a customer address');
+server.registerTool('update_customer_address', { title: 'Update Customer Address', description: 'Update a customer address', inputSchema: { customerId: z.coerce.number().describe('Customer ID'), ...addressInputSchema }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ customerId, ...data }) => { await client.updateCustomerAddress(customerId, data); return jsonResponse({ success: true }); });
+
+rememberTool('delete_customer_address', 'Delete a customer address');
+server.registerTool('delete_customer_address', { title: 'Delete Customer Address', description: 'Delete a customer address', inputSchema: { customerId: z.coerce.number().describe('Customer ID') }, annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS }, async ({ customerId }) => { await client.deleteCustomerAddress(customerId); return jsonResponse({ success: true }); });
+
+// --- Customer extras (v3 list, overwrite, async delete, property definitions) ---
+rememberTool('list_customers_v3', 'List customers via the v3 cursor-paginated endpoint (spans all mailboxes)');
+server.registerTool('list_customers_v3', { title: 'List Customers (v3)', description: 'List customers via the v3 cursor-paginated endpoint (spans all mailboxes). Returns { customers, nextCursor }.', inputSchema: { firstName: z.string().optional(), lastName: z.string().optional(), email: z.string().optional(), createdSince: z.string().optional(), modifiedSince: z.string().optional(), query: z.string().optional(), cursor: z.string().optional().describe('Opaque cursor token from a previous page') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async (params) => jsonResponse(await client.listCustomersV3(params)));
+
+rememberTool('overwrite_customer', 'Overwrite a customer (full replace — omitted fields are cleared)');
+server.registerTool('overwrite_customer', { title: 'Overwrite Customer', description: 'Overwrite a customer (full replace — omitted fields are cleared)', inputSchema: { customerId: z.coerce.number().describe('Customer ID'), firstName: z.string().optional(), lastName: z.string().optional(), phone: z.string().optional(), jobTitle: z.string().optional(), location: z.string().optional(), organization: z.string().optional(), background: z.string().optional(), gender: z.string().optional(), age: z.string().optional() }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ customerId, ...data }) => { await client.overwriteCustomer(customerId, data); return jsonResponse({ success: true }); });
+
+rememberTool('delete_customer_async', 'Delete a customer asynchronously (GDPR erasure)');
+server.registerTool('delete_customer_async', { title: 'Delete Customer (Async)', description: 'Delete a customer asynchronously (GDPR erasure; returns immediately)', inputSchema: { customerId: z.coerce.number().describe('Customer ID') }, annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS }, async ({ customerId }) => { await client.deleteCustomerAsync(customerId); return jsonResponse({ success: true }); });
+
+rememberTool('list_customer_property_definitions', 'List customer property definitions');
+server.registerTool('list_customer_property_definitions', { title: 'List Customer Property Definitions', description: 'List customer property definitions', annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async () => jsonResponse(await client.listCustomerPropertyDefinitions()));
+
+rememberTool('create_customer_property_definition', 'Create a customer property definition');
+server.registerTool('create_customer_property_definition', { title: 'Create Customer Property Definition', description: 'Create a customer property definition', inputSchema: { type: z.enum(['number', 'text', 'url', 'date', 'dropdown']).describe('Property type'), slug: z.string().describe('Unique slug'), name: z.string().describe('Display name'), options: z.array(z.object({ label: z.string() })).optional().describe('Dropdown options') }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async (data) => { await client.createCustomerPropertyDefinition(data); return jsonResponse({ success: true }); });
+
+rememberTool('delete_customer_property_definition', 'Delete a customer property definition by slug');
+server.registerTool('delete_customer_property_definition', { title: 'Delete Customer Property Definition', description: 'Delete a customer property definition by slug', inputSchema: { slug: z.string().describe('Property slug') }, annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS }, async ({ slug }) => { await client.deleteCustomerPropertyDefinition(slug); return jsonResponse({ success: true }); });
+
+rememberTool('update_customer_properties', "Set/remove a customer's property values (JSON Patch)");
+server.registerTool('update_customer_properties', { title: 'Update Customer Properties', description: "Set or remove a customer's property values via JSON Patch (ops: replace/remove; path is /{slug})", inputSchema: { customerId: z.coerce.number().describe('Customer ID'), operations: z.array(z.object({ op: z.enum(['replace', 'remove']), path: z.string().describe('Property path, e.g. /car'), value: z.union([z.string(), z.number()]).optional() })).describe('JSON Patch operations') }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ customerId, operations }) => { await client.updateCustomerProperties(customerId, operations as never); return jsonResponse({ success: true }); });
+
+// --- Inbox folders + routing ---
+rememberTool('list_mailbox_folders', 'List inbox folders for a mailbox');
+server.registerTool('list_mailbox_folders', { title: 'List Mailbox Folders', description: 'List inbox folders for a mailbox', inputSchema: { mailboxId: z.coerce.number().describe('Mailbox ID') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ mailboxId }) => jsonResponse(await client.listMailboxFolders(mailboxId)));
+
+rememberTool('get_routing_config', 'Get routing configuration for a mailbox');
+server.registerTool('get_routing_config', { title: 'Get Routing Config', description: 'Get routing configuration for a mailbox', inputSchema: { mailboxId: z.coerce.number().describe('Mailbox ID') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ mailboxId }) => jsonResponse(await client.getRoutingConfig(mailboxId)));
+
+rememberTool('update_routing_config', 'Update routing configuration for a mailbox (merges with existing)');
+server.registerTool('update_routing_config', { title: 'Update Routing Config', description: 'Update routing configuration for a mailbox (GET-then-merge; the PUT replaces all fields)', inputSchema: { mailboxId: z.coerce.number().describe('Mailbox ID'), state: z.enum(['enabled', 'disabled']).optional(), assignmentLimit: z.coerce.number().optional(), assignmentMethod: z.enum(['round_robin', 'balanced']).optional(), userIds: z.array(z.number()).optional() }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async ({ mailboxId, ...data }) => { await client.updateRoutingConfig(mailboxId, data); return jsonResponse({ success: true }); });
+
+// --- System users (v3; AI agents) ---
+rememberTool('list_system_users', 'List system users (AI agents)');
+server.registerTool('list_system_users', { title: 'List System Users', description: 'List system users (AI agents) — the actors behind system_user attribution', inputSchema: { page: z.coerce.number().optional().describe('Page number') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ page }) => jsonResponse(await client.listSystemUsers(page)));
+
+rememberTool('get_system_user', 'Get a system user');
+server.registerTool('get_system_user', { title: 'Get System User', description: 'Get a system user (AI agent)', inputSchema: { systemUserId: z.coerce.number().describe('System user ID') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ systemUserId }) => jsonResponse(await client.getSystemUser(systemUserId)));
+
+// --- Users (create/delete) ---
+rememberTool('create_user', 'Create a Help Scout user');
+server.registerTool('create_user', { title: 'Create User', description: 'Create a Help Scout user (sends an invite unless sendInvite is false)', inputSchema: { firstName: z.string(), lastName: z.string(), email: z.string().email(), role: z.enum(['admin', 'user', 'light user']), timezone: z.string().optional(), jobTitle: z.string().optional(), phone: z.string().optional(), sendInvite: z.boolean().optional() }, annotations: MUTATING_REMOTE_ANNOTATIONS }, async (data) => jsonResponse(await client.createUser(data)));
+
+rememberTool('delete_user', 'Delete a Help Scout user');
+server.registerTool('delete_user', { title: 'Delete User', description: 'Delete a Help Scout user (admins/owners only; cannot delete self)', inputSchema: { userId: z.coerce.number().describe('User ID') }, annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS }, async ({ userId }) => { await client.deleteUser(userId); return jsonResponse({ success: true }); });
+
+// --- Ratings ---
+rememberTool('get_satisfaction_rating', 'Get a single satisfaction rating by id');
+server.registerTool('get_satisfaction_rating', { title: 'Get Satisfaction Rating', description: 'Get a single satisfaction rating by id (distinct from the happiness-ratings report)', inputSchema: { ratingId: z.coerce.number().describe('Rating ID') }, annotations: READ_ONLY_REMOTE_ANNOTATIONS }, async ({ ratingId }) => jsonResponse(await client.getSatisfactionRating(ratingId)));
+
 // --- Expanded report tools (registered via a table; all read-only, Plus/Pro) ---
 const viewByField = {
   viewBy: z.enum(['day', 'week', 'month']).optional().describe('Data granularity'),
