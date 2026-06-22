@@ -1,5 +1,6 @@
 import { Command } from 'commander';
 import { client } from '../lib/api-client.js';
+import { downloadConversationAttachment } from '../lib/attachment-download.js';
 import { outputJson, htmlToPlainText, buildName } from '../lib/output.js';
 import { withErrorHandling, requireConfirmation, parseIdArg } from '../lib/command-utils.js';
 import { buildDateQuery } from '../lib/dates.js';
@@ -28,6 +29,11 @@ interface ConversationSummary {
 }
 
 const MAX_MESSAGE_LENGTH = 300;
+
+interface DownloadAttachmentOptions {
+  output?: string;
+  force?: boolean;
+}
 
 function truncate(text: string): string {
   if (text.length <= MAX_MESSAGE_LENGTH) return text;
@@ -250,6 +256,30 @@ export function createConversationsCommand(): Command {
         }
       )
     );
+
+  const attachments = new Command('attachments').description('Conversation attachment operations');
+
+  attachments
+    .command('download')
+    .description('Download an attachment file from a conversation')
+    .argument(
+      '<conversationId>',
+      'Conversation ID, or ticket number prefixed with "#" (e.g. "#12345")'
+    )
+    .argument('<attachmentId>', 'Attachment ID')
+    .option('-o, --output <path>', 'Output file or directory')
+    .option('-f, --force', 'Overwrite existing output file')
+    .action(
+      withErrorHandling(
+        async (
+          conversationRef: string,
+          attachmentRef: string,
+          options: DownloadAttachmentOptions
+        ) => downloadConversationAttachment(conversationRef, attachmentRef, options)
+      )
+    );
+
+  cmd.addCommand(attachments);
 
   cmd
     .command('delete')

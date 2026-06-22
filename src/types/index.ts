@@ -115,6 +115,13 @@ export interface Thread {
   openedAt?: string;
 }
 
+export interface AttachmentDownload {
+  data: Uint8Array;
+  contentType?: string;
+  contentLength?: number;
+  contentDisposition?: string;
+}
+
 export interface Customer {
   id: number;
   firstName?: string;

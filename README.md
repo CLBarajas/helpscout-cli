@@ -44,6 +44,10 @@ helpscout conversations threads 456
 helpscout conversations threads 456 --type customer  # Filter by type
 helpscout conversations threads 456 --html          # HTML output
 helpscout conversations threads 456 --include-notes
+helpscout conversations attachments download 456 789
+helpscout conversations attachments download 456 789 --output ./invoice.pdf
+helpscout conversations attachments download 456 789 --output ./downloads/
+helpscout conversations attachments download 456 789 --force
 helpscout conversations status 456 closed
 helpscout conversations reply 456 --text "Thanks for reaching out!"
 helpscout conversations note 456 --text "Internal note"
