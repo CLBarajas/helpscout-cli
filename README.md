@@ -107,9 +107,10 @@ helpscout mcp
 
 The MCP server exposes:
 
-- Typed tools for Help Scout search, full conversation detail, full conversation thread history, mailbox/customer/user lookup, and safe draft-note/status mutations
+- Typed tools for Help Scout search, full conversation detail, full conversation thread history, attachment downloads, mailbox/customer/user lookup, and safe draft-note/status mutations
 - `get_conversation` accepts internal conversation IDs or visible ticket numbers like `#12345`
 - `get_conversation_threads` returns all Help Scout thread types by default, including notes, workflow events, status events, and other system events returned by Help Scout
+- `download_attachment` saves a conversation attachment to disk, using the Help Scout filename by default and requiring `force` before overwriting existing files
 - `update_conversation_status` safely changes ticket status, with `open` normalized to Help Scout's `active` status
 - `create_note` adds private notes and can optionally set the ticket status, such as closing no-action tickets
 - User lookup tools expose Help Scout mention handles for composing `@mention` references

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HelpScoutCliError } from './errors.js';
 import type { AttachmentDownload } from '../types/index.js';
 import {
-  downloadConversationAttachment,
+  downloadAttachmentToFile,
   parseContentDispositionFilename,
   resolveAttachmentOutputPath,
   safeAttachmentFilename,
@@ -17,7 +17,6 @@ describe('attachment download helpers', () => {
   let originalCwd: string;
   let resolveConversationId: ReturnType<typeof vi.fn>;
   let downloadAttachment: ReturnType<typeof vi.fn>;
-  let output: ReturnType<typeof vi.fn>;
 
   function deps(): DownloadAttachmentDeps {
     return {
@@ -26,7 +25,6 @@ describe('attachment download helpers', () => {
         conversationId: number,
         attachmentId: number
       ) => Promise<AttachmentDownload>,
-      output: output as unknown as (data: unknown) => void,
     };
   }
 
@@ -40,7 +38,6 @@ describe('attachment download helpers', () => {
       contentType: 'application/pdf',
       contentDisposition: 'attachment; filename="Invoice-BFFE9E51-0026.pdf"',
     });
-    output = vi.fn();
   });
 
   afterEach(async () => {
@@ -79,14 +76,14 @@ describe('attachment download helpers', () => {
   });
 
   it('downloads to the content-disposition filename by default', async () => {
-    await downloadConversationAttachment('3361978051', '933302294', {}, deps());
+    const result = await downloadAttachmentToFile('3361978051', '933302294', {}, deps());
 
     await expect(readFile(path.join(tempDir, 'Invoice-BFFE9E51-0026.pdf'))).resolves.toEqual(
       Buffer.from([0x25, 0x50, 0x44, 0x46])
     );
     expect(resolveConversationId).toHaveBeenCalledWith('3361978051');
     expect(downloadAttachment).toHaveBeenCalledWith(3361978051, 933302294);
-    expect(output).toHaveBeenCalledWith(
+    expect(result).toEqual(
       expect.objectContaining({
         message: 'Attachment downloaded',
         conversationId: 3361978051,
@@ -102,7 +99,7 @@ describe('attachment download helpers', () => {
     const directory = path.join(tempDir, 'downloads');
     await mkdir(directory);
 
-    await downloadConversationAttachment('#47156', '933302294', { output: directory }, deps());
+    await downloadAttachmentToFile('#47156', '933302294', { output: directory }, deps());
 
     await expect(readFile(path.join(directory, 'Invoice-BFFE9E51-0026.pdf'))).resolves.toEqual(
       Buffer.from([0x25, 0x50, 0x44, 0x46])
@@ -113,10 +110,15 @@ describe('attachment download helpers', () => {
   it('downloads to an explicit file path', async () => {
     const outputPath = path.join(tempDir, 'custom-name.pdf');
 
-    await downloadConversationAttachment('3361978051', '933302294', { output: outputPath }, deps());
+    const result = await downloadAttachmentToFile(
+      '3361978051',
+      '933302294',
+      { output: outputPath },
+      deps()
+    );
 
     await expect(readFile(outputPath)).resolves.toEqual(Buffer.from([0x25, 0x50, 0x44, 0x46]));
-    expect(output).toHaveBeenCalledWith(
+    expect(result).toEqual(
       expect.objectContaining({ filename: 'custom-name.pdf', path: outputPath })
     );
   });
@@ -126,11 +128,11 @@ describe('attachment download helpers', () => {
     await writeFile(outputPath, 'existing');
 
     await expect(
-      downloadConversationAttachment('3361978051', '933302294', { output: outputPath }, deps())
+      downloadAttachmentToFile('3361978051', '933302294', { output: outputPath }, deps())
     ).rejects.toThrow(HelpScoutCliError);
     await expect(readFile(outputPath, 'utf8')).resolves.toBe('existing');
 
-    await downloadConversationAttachment(
+    await downloadAttachmentToFile(
       '3361978051',
       '933302294',
       { output: outputPath, force: true },
@@ -141,7 +143,7 @@ describe('attachment download helpers', () => {
   });
 
   it('rejects invalid attachment ids before resolving the conversation', async () => {
-    await expect(downloadConversationAttachment('3361978051', 'abc', {}, deps())).rejects.toThrow(
+    await expect(downloadAttachmentToFile('3361978051', 'abc', {}, deps())).rejects.toThrow(
       'Invalid attachment ID'
     );
     expect(resolveConversationId).not.toHaveBeenCalled();

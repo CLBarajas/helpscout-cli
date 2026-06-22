@@ -122,6 +122,16 @@ export interface AttachmentDownload {
   contentDisposition?: string;
 }
 
+export interface AttachmentDownloadResult {
+  message: 'Attachment downloaded';
+  conversationId: number;
+  attachmentId: number;
+  filename: string;
+  path: string;
+  bytes: number;
+  contentType?: string;
+}
+
 export interface Customer {
   id: number;
   firstName?: string;

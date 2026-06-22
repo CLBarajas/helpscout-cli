@@ -4,12 +4,11 @@ import { client } from './api-client.js';
 import { parseIdArg } from './command-utils.js';
 import { HelpScoutCliError } from './errors.js';
 import { outputJson } from './output.js';
-import type { AttachmentDownload } from '../types/index.js';
+import type { AttachmentDownload, AttachmentDownloadResult } from '../types/index.js';
 
 export interface DownloadAttachmentDeps {
   resolveConversationId(ref: string): Promise<number>;
   downloadAttachment(conversationId: number, attachmentId: number): Promise<AttachmentDownload>;
-  output(data: unknown): void;
 }
 
 export function parseContentDispositionFilename(
@@ -100,7 +99,7 @@ async function writeAttachmentFile(outputPath: string, data: Uint8Array, force?:
   }
 }
 
-export async function downloadConversationAttachment(
+export async function downloadAttachmentToFile(
   conversationRef: string,
   attachmentRef: string,
   options: { output?: string; force?: boolean },
@@ -108,9 +107,8 @@ export async function downloadConversationAttachment(
     resolveConversationId: (ref) => client.resolveConversationId(ref),
     downloadAttachment: (conversationId, attachmentId) =>
       client.downloadAttachment(conversationId, attachmentId),
-    output: outputJson,
   }
-): Promise<void> {
+): Promise<AttachmentDownloadResult> {
   const attachmentId = parseIdArg(attachmentRef, 'attachment');
   const conversationId = await deps.resolveConversationId(conversationRef);
   const attachment = await deps.downloadAttachment(conversationId, attachmentId);
@@ -123,13 +121,27 @@ export async function downloadConversationAttachment(
   await mkdir(path.dirname(outputPath), { recursive: true });
   await writeAttachmentFile(outputPath, attachment.data, options.force);
 
-  deps.output({
+  const result: AttachmentDownloadResult = {
     message: 'Attachment downloaded',
     conversationId,
     attachmentId,
     filename: path.basename(outputPath),
     path: outputPath,
     bytes: attachment.data.byteLength,
-    contentType: attachment.contentType,
-  });
+  };
+
+  if (attachment.contentType) {
+    result.contentType = attachment.contentType;
+  }
+
+  return result;
+}
+
+export async function downloadConversationAttachment(
+  conversationRef: string,
+  attachmentRef: string,
+  options: { output?: string; force?: boolean },
+  deps?: DownloadAttachmentDeps
+): Promise<void> {
+  outputJson(await downloadAttachmentToFile(conversationRef, attachmentRef, options, deps));
 }
