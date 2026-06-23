@@ -29,6 +29,58 @@ describe('Help Scout MCP server helpers', () => {
     );
   });
 
+  // Locks the customFields[].type defect: the conversation list/search embed
+  // returns custom fields as {id, name, value, text} with NO `type`, so a schema
+  // that required `type` made search_by_customer (and search/list_conversations,
+  // get_conversation) fail output validation on every conversation carrying
+  // custom fields. This payload is a verbatim sample of that real embed shape.
+  it('validates conversation custom fields without a `type` (real embed shape)', () => {
+    const conversationWithEmbedCustomFields = {
+      id: 3353621870,
+      number: 185469,
+      type: 'email',
+      status: 'active',
+      state: 'published',
+      subject: 'Re: automatic end to recording',
+      preview: 'Hi Chris, I have made that update...',
+      mailboxId: 164710,
+      createdAt: '2026-06-12T16:03:11Z',
+      // The list/search embed shape: id/name/value/text, never `type`.
+      customFields: [
+        { id: 23628, name: 'Topic', value: '116010', text: 'App Support' },
+        { id: 23657, name: 'App', value: '116013', text: 'Audio Hijack' },
+      ],
+    };
+
+    const result = mcpServer.outputSchemasForTesting.searchByCustomer.safeParse({
+      conversations: [conversationWithEmbedCustomFields],
+      meta: {
+        email: 'pm@philxmilstein.com',
+        domain: 'philxmilstein.com',
+        domainSearchSkipped: false,
+        emailResults: 1,
+        domainResults: 0,
+        totalAfterDedup: 1,
+      },
+    });
+
+    expect(result.success).toBe(true);
+
+    // The same shared conversationSchema backs search/list, so the fix covers
+    // those latent paths too.
+    expect(
+      mcpServer.outputSchemasForTesting.searchConversations.safeParse({
+        conversations: [conversationWithEmbedCustomFields],
+      }).success
+    ).toBe(true);
+    expect(
+      mcpServer.outputSchemasForTesting.listConversations.safeParse({
+        conversations: [conversationWithEmbedCustomFields],
+        page: { size: 25, totalElements: 1, totalPages: 1, number: 1 },
+      }).success
+    ).toBe(true);
+  });
+
   // Locks the search_tools discovery defect (was: 22 remembered vs 62 served).
   // Every tool registered on the MCP server must have a matching rememberTool()
   // entry, or it becomes invisible to the search_tools registry.

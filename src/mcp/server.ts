@@ -270,12 +270,19 @@ const tagSchema = z
   })
   .passthrough();
 
+// Custom fields as embedded in conversation list/search/detail responses.
+// Unlike the field-definition endpoints (list_mailbox_fields /
+// get_conversation_fields, which have no output schema), the conversation embed
+// omits `type` and instead carries `text` — the human-readable label for the
+// stored `value` (e.g. value "116013" → text "Audio Hijack"). `type` is therefore
+// optional here so real list/search payloads validate; `text` documents the label.
 const customFieldSchema = z
   .object({
     id: z.number().optional(),
     name: z.string(),
     value: z.string(),
-    type: z.string(),
+    type: z.string().optional(),
+    text: z.string().optional(),
   })
   .passthrough();
 
@@ -651,6 +658,18 @@ export function getServerToolNamesForTesting(): string[] {
   const internal = server as unknown as { _registeredTools: Record<string, unknown> };
   return Object.keys(internal._registeredTools);
 }
+
+/**
+ * Conversation-returning output schemas, exposed so tests can validate them
+ * against realistic Help Scout list/search embed payloads (which omit
+ * customFields[].type — see customFieldSchema).
+ */
+export const outputSchemasForTesting = {
+  searchByCustomer: searchByCustomerOutputSchema,
+  searchConversations: searchConversationsOutputSchema,
+  listConversations: listConversationsOutputSchema,
+  conversationDetail: conversationDetailOutputSchema,
+};
 
 const dateFilterSchema = {
   createdSince: z
