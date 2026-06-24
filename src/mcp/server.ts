@@ -234,12 +234,14 @@ function userResourceUri(userId: number) {
   return `helpscout://user/${userId}`;
 }
 
-const pageInfoSchema = z.object({
-  size: z.number(),
-  totalElements: z.number(),
-  totalPages: z.number(),
-  number: z.number(),
-});
+const pageInfoSchema = z
+  .object({
+    size: z.number(),
+    totalElements: z.number(),
+    totalPages: z.number(),
+    number: z.number(),
+  })
+  .passthrough();
 
 const personSchema = z
   .object({
@@ -308,6 +310,7 @@ const conversationSchema = z
         time: z.string(),
         friendly: z.string(),
       })
+      .passthrough()
       .optional(),
     source: sourceSchema.optional(),
     tags: z.array(tagSchema).optional(),
@@ -332,6 +335,7 @@ const threadSchema = z
         type: z.string(),
         text: z.string().optional(),
       })
+      .passthrough()
       .optional(),
     body: z.string().optional(),
     source: sourceSchema.optional(),
@@ -670,6 +674,11 @@ export const outputSchemasForTesting = {
   listConversations: listConversationsOutputSchema,
   conversationDetail: conversationDetailOutputSchema,
 };
+
+/** Exposed for tests guarding the thread output schema against over-strict nesting. */
+export function getThreadSchemaForTesting() {
+  return threadSchema;
+}
 
 const dateFilterSchema = {
   createdSince: z
