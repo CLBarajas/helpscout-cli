@@ -18,8 +18,9 @@ the 6/10 merge-session backlog (outboard `tasks/inbox.md`), and `FORK_IMPLEMENTA
   v2.16.0 on 6/12 → `bea4efd`), not cherry-pick. Strategy with upstream: **file issues, never PRs**
   (no outside human PR has ever been merged there; maintainer reimplements from issues — see
   note `--status` precedent: our PR #26 closed, his PR #45 shipped it).
-- Fork state at writing: 62 MCP tools (41 fork-only), v2.16.0, main 2 ahead of origin (Chris
-  pushes manually — **never push without his say-so**).
+- Current fork state (version, tool count, ahead/behind upstream, what's pending/excluded) lives
+  in [`UPSTREAM_SYNC.md`](UPSTREAM_SYNC.md) — single source of truth, not duplicated here. (Chris
+  pushes manually — **never push without his say-so**.)
 - Verification gates for everything: `bun run typecheck && bun run lint && bun test`, then
   `bun run build` + `bun link`; MCP changes additionally need a Claude Code session restart
   to take effect. Update `TESTING.md` when commands change.
