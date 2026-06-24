@@ -38,6 +38,7 @@ describe('HelpScoutClient', () => {
       getRefreshToken: vi.fn().mockResolvedValue(null),
       setAccessToken: vi.fn().mockResolvedValue(true),
       setRefreshToken: vi.fn().mockResolvedValue(true),
+      getDocsApiKey: vi.fn().mockResolvedValue('docs-key'),
     });
   });
 
@@ -157,6 +158,101 @@ describe('HelpScoutClient', () => {
     fetchMock.mockResolvedValueOnce(Response.json({ error: 'not found' }, { status: 404 }));
 
     await expect(client.downloadAttachment(123, 456)).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  // --- Mailbox vs Docs auth boundary (characterization) ---
+  // These two pin the single highest-risk behavior of the two-API client: a
+  // Mailbox 401 must refresh and retry; a Docs 401 must NOT touch the shared
+  // OAuth token. Without these, the Docs branch could regress Mailbox auth
+  // silently (the 401-refresh path had no coverage before).
+
+  it('refreshes the OAuth token and retries once on a Mailbox 401', async () => {
+    const setAccessToken = vi.fn().mockResolvedValue(true);
+    client = new HelpScoutClient({
+      getAccessToken: vi.fn().mockResolvedValue('stale-token'),
+      getAppId: vi.fn().mockResolvedValue('app-id'),
+      getAppSecret: vi.fn().mockResolvedValue('app-secret'),
+      getRefreshToken: vi.fn().mockResolvedValue(null),
+      setAccessToken,
+      setRefreshToken: vi.fn().mockResolvedValue(true),
+      getDocsApiKey: vi.fn().mockResolvedValue('docs-key'),
+    });
+
+    fetchMock
+      // 1) initial Mailbox call → 401
+      .mockResolvedValueOnce(Response.json({ error: 'unauthorized' }, { status: 401 }))
+      // 2) client_credentials token refresh → fresh token
+      .mockResolvedValueOnce(
+        Response.json({ access_token: 'fresh-token', token_type: 'bearer', expires_in: 3600 })
+      )
+      // 3) retried Mailbox call → 200
+      .mockResolvedValueOnce(Response.json({ id: 123 }));
+
+    const conversation = await client.getConversation(123);
+
+    expect(conversation).toMatchObject({ id: 123 });
+    // The 401 minted and persisted a new OAuth token via the token endpoint...
+    expect(setAccessToken).toHaveBeenCalledWith('fresh-token');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1][0]).toBe('https://api.helpscout.net/v2/oauth2/token');
+    // ...the first attempt used the stale token, the retry the refreshed one.
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>).Authorization).toBe(
+      'Bearer stale-token'
+    );
+    expect((fetchMock.mock.calls[2][1].headers as Record<string, string>).Authorization).toBe(
+      'Bearer fresh-token'
+    );
+  });
+
+  it('does not refresh OAuth or touch the Mailbox token on a Docs 401', async () => {
+    const setAccessToken = vi.fn().mockResolvedValue(true);
+    client = new HelpScoutClient({
+      getAccessToken: vi.fn().mockResolvedValue('test-token'),
+      getAppId: vi.fn().mockResolvedValue('app-id'),
+      getAppSecret: vi.fn().mockResolvedValue('app-secret'),
+      getRefreshToken: vi.fn().mockResolvedValue(null),
+      setAccessToken,
+      setRefreshToken: vi.fn().mockResolvedValue(true),
+      getDocsApiKey: vi.fn().mockResolvedValue('docs-key'),
+    });
+
+    fetchMock.mockResolvedValueOnce(Response.json({ error: 'invalid key' }, { status: 401 }));
+
+    await expect(client.listDocsCollections()).rejects.toMatchObject({ statusCode: 401 });
+
+    // A single fetch: no token-refresh hop, no retry.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // The shared Mailbox OAuth token is never re-minted over a Docs failure.
+    expect(setAccessToken).not.toHaveBeenCalled();
+    // It hit the Docs host with Basic auth (key as username, ":X").
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/collections');
+    const expectedAuth = `Basic ${Buffer.from('docs-key:X').toString('base64')}`;
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>).Authorization).toBe(
+      expectedAuth
+    );
+  });
+
+  it('reads Docs collections over the Docs API with Basic auth on success', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        collections: {
+          page: 1,
+          pages: 1,
+          count: 1,
+          items: [{ id: 'abc', name: 'Shadow KB', visibility: 'private' }],
+        },
+      })
+    );
+
+    const result = await client.listDocsCollections();
+
+    expect(result.collections.items[0]).toMatchObject({ id: 'abc', name: 'Shadow KB' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/collections');
+    const expectedAuth = `Basic ${Buffer.from('docs-key:X').toString('base64')}`;
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>).Authorization).toBe(
+      expectedAuth
+    );
   });
 
   it('creates a customer thread and returns the new thread id', async () => {

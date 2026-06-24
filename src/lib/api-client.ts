@@ -76,6 +76,13 @@ const API_ROOT = 'https://api.helpscout.net';
 const API_BASE = `${API_ROOT}/v2`;
 type ApiVersion = 'v2' | 'v3';
 
+// The Docs API is a SEPARATE Help Scout API: a different host, and HTTP Basic
+// auth (Docs API key as the username) instead of Mailbox OAuth. `api` selects
+// which one a request targets; it defaults to 'mailbox' so every existing call
+// is unchanged.
+const DOCS_API_BASE = 'https://docsapi.helpscout.net/v1';
+type ApiTarget = 'mailbox' | 'docs';
+
 // v3 endpoints (e.g. List Customers v3) use cursor pagination: the next page's
 // opaque cursor token is embedded in _links.next.href, with no page/totalPages.
 interface CursorPaginatedResponse<T> {
@@ -100,6 +107,26 @@ interface PaginatedResponse<T> {
   page: PageInfo;
 }
 
+// Docs API list responses wrap items under the resource's plural key, e.g.
+// { collections: { items, page, pages, count } } — distinct from the Mailbox
+// API's _embedded/page envelope.
+interface DocsListResponse<T> {
+  page: number;
+  pages: number;
+  count: number;
+  items: T[];
+}
+
+interface DocsCollection {
+  id: string;
+  number?: number;
+  slug?: string;
+  name: string;
+  visibility?: string;
+  articleCount?: number;
+  publishedArticleCount?: number;
+}
+
 interface AuthProvider {
   getAccessToken(): Promise<string | null>;
   setAccessToken(token: string): Promise<boolean>;
@@ -107,6 +134,7 @@ interface AuthProvider {
   setRefreshToken(token: string): Promise<boolean>;
   getAppId(): Promise<string | null>;
   getAppSecret(): Promise<string | null>;
+  getDocsApiKey(): Promise<string | null>;
 }
 
 export class HelpScoutClient {
@@ -209,6 +237,7 @@ export class HelpScoutClient {
       body?: unknown;
       retry?: boolean;
       rateLimitRetry?: boolean;
+      api?: ApiTarget;
       version?: ApiVersion;
       accept?: string;
       redirect?: 'follow' | 'error' | 'manual';
@@ -219,12 +248,14 @@ export class HelpScoutClient {
       body,
       retry = true,
       rateLimitRetry = true,
+      api = 'mailbox',
       version = 'v2',
       accept,
       redirect,
     } = options;
 
-    const base = version === 'v3' ? `${API_ROOT}/v3` : API_BASE;
+    const base =
+      api === 'docs' ? DOCS_API_BASE : version === 'v3' ? `${API_ROOT}/v3` : API_BASE;
     const url = new URL(`${base}${path}`);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -234,11 +265,26 @@ export class HelpScoutClient {
       });
     }
 
-    const token = await this.getAccessToken();
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     };
+    if (api === 'docs') {
+      // Docs API: HTTP Basic auth with the API key as the username (Help Scout
+      // ignores the password). The key does not expire, so there is no token
+      // cache and no refresh — this deliberately bypasses the Mailbox OAuth path
+      // and never reads or writes the shared `this.accessToken`.
+      const docsApiKey = await this.authManager.getDocsApiKey();
+      if (!docsApiKey) {
+        throw new HelpScoutCliError(
+          'Docs API key not configured. Set it in the keychain (helpscout-cli/docs-api-key) or via the HELPSCOUT_DOCS_API_KEY environment variable.',
+          401
+        );
+      }
+      headers.Authorization = `Basic ${Buffer.from(`${docsApiKey}:X`).toString('base64')}`;
+    } else {
+      const token = await this.getAccessToken();
+      headers.Authorization = `Bearer ${token}`;
+    }
     if (accept) {
       headers.Accept = accept;
     }
@@ -258,7 +304,9 @@ export class HelpScoutClient {
       throw new HelpScoutCliError(`Network request failed: ${message}`, 0);
     }
 
-    if (response.status === 401 && retry) {
+    // OAuth refresh-and-retry is Mailbox-only. A Docs 401 means a bad/expired
+    // Docs key, so never null or re-mint the shared Mailbox token over it.
+    if (response.status === 401 && retry && api !== 'docs') {
       this.accessToken = null;
       await this.refreshAccessToken();
       return this.rawRequest(method, path, { ...options, retry: false });
@@ -296,6 +344,7 @@ export class HelpScoutClient {
       body?: unknown;
       retry?: boolean;
       rateLimitRetry?: boolean;
+      api?: ApiTarget;
       version?: ApiVersion;
     } = {}
   ): Promise<T> {
@@ -1607,6 +1656,23 @@ export class HelpScoutClient {
   }
   async getPhoneReport(params: ChannelReportParams) {
     return this.getReport<PhoneReport>('/reports/phone', params);
+  }
+
+  // --- Docs API (docsapi.helpscout.net/v1) ---
+  // First read primitive against the separate Docs API. The sync/write *policy*
+  // (collision detection, content-hash idempotency, reconcile) deliberately
+  // stays in the Python bridge tooling (kb_docs_sync.py); the CLI owns the
+  // transport. Docs writes, when added, route through rawRequest directly (like
+  // createDraftConversation) and read the Location header — never through the
+  // Mailbox-only requestForCreation funnel.
+  async listDocsCollections(
+    params: { page?: number; siteId?: string; visibility?: string } = {}
+  ): Promise<{ collections: DocsListResponse<DocsCollection> }> {
+    return this.request<{ collections: DocsListResponse<DocsCollection> }>(
+      'GET',
+      '/collections',
+      { api: 'docs', params }
+    );
   }
 }
 

@@ -6,6 +6,7 @@ const ACCESS_TOKEN_ACCOUNT = 'access-token';
 const REFRESH_TOKEN_ACCOUNT = 'refresh-token';
 const APP_ID_ACCOUNT = 'app-id';
 const APP_SECRET_ACCOUNT = 'app-secret';
+const DOCS_API_KEY_ACCOUNT = 'docs-api-key';
 
 const keyringCache = new Map<string, Entry | null>();
 
@@ -96,6 +97,17 @@ export class AuthManager {
 
   async setAppSecret(appSecret: string): Promise<boolean> {
     return setPassword(APP_SECRET_ACCOUNT, appSecret);
+  }
+
+  // Docs API uses a standalone API key (minted in the Help Scout web UI), not
+  // OAuth. Keychain-then-env, mirroring getAppId/getAppSecret.
+  async getDocsApiKey(): Promise<string | null> {
+    const keychainValue = await getPassword(DOCS_API_KEY_ACCOUNT);
+    return keychainValue || process.env.HELPSCOUT_DOCS_API_KEY || null;
+  }
+
+  async setDocsApiKey(key: string): Promise<boolean> {
+    return setPassword(DOCS_API_KEY_ACCOUNT, key);
   }
 
   async isAuthenticated(): Promise<boolean> {
