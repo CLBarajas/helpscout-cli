@@ -51,6 +51,16 @@
 _(to be written at execution; one `### Draft N — <title>` block per candidate, full issue
 body verbatim, status line: DRAFT / APPROVED / POSTED <link> / SHIPPED <version>)_
 
+## Filed bug reports (distinct from the feature-offer batch above)
+
+Bugs we hit and reported upstream. Where we carry a fork-local patch, drop it at the next
+merge if/when upstream adopts a fix (see Aftercare).
+
+| Issue | Bug | Fork-side state |
+|-------|-----|-----------------|
+| [#48](https://github.com/stephendolan/helpscout-cli/issues/48) | `draft-reply` 400 — reply omits required `customer` | Live in fork too; local fix was reverted, NOT carried — CLI draft path still 400s |
+| [#56](https://github.com/stephendolan/helpscout-cli/issues/56) | MCP output validation: `customFields[].type` required but list/search embed omits it | Fix carried on `main` (`20d18fe`, 2026-06-23): `type`→optional + `text` declared + regression test in `src/mcp/server.test.ts`. Distinct failure mode from upstream's #50 passthrough sweep (missing required field, not an extra unknown one). Drop on upstream adoption |
+
 ## Aftercare
 
 - On any upstream adoption: drop fork duplicate at next merge, retest dependent skills
