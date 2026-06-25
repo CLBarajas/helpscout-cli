@@ -127,6 +127,40 @@ interface DocsCollection {
   publishedArticleCount?: number;
 }
 
+interface DocsCategory {
+  id: string;
+  number?: number;
+  slug?: string;
+  name: string;
+  order?: number;
+  articleCount?: number;
+  publishedArticleCount?: number;
+  visibility?: string;
+}
+
+// Articles appear as lightweight refs in list/search/related results (no body
+// text); the single-article GET returns the full article including `text`.
+interface DocsArticleRef {
+  id: string;
+  number?: number;
+  collectionId?: string;
+  slug?: string;
+  status?: string;
+  hasDraft?: boolean;
+  name: string;
+  categories?: string[];
+  popularity?: number;
+  viewCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface DocsArticle extends DocsArticleRef {
+  text?: string;
+  keywords?: string[];
+  related?: string[];
+}
+
 interface AuthProvider {
   getAccessToken(): Promise<string | null>;
   setAccessToken(token: string): Promise<boolean>;
@@ -1671,6 +1705,84 @@ export class HelpScoutClient {
     return this.request<{ collections: DocsListResponse<DocsCollection> }>(
       'GET',
       '/collections',
+      { api: 'docs', params }
+    );
+  }
+
+  async getDocsCollection(collectionId: string): Promise<{ collection: DocsCollection }> {
+    return this.request<{ collection: DocsCollection }>('GET', `/collections/${collectionId}`, {
+      api: 'docs',
+    });
+  }
+
+  async listDocsCategories(
+    collectionId: string,
+    params: { page?: number; sort?: string; order?: string } = {}
+  ): Promise<{ categories: DocsListResponse<DocsCategory> }> {
+    return this.request<{ categories: DocsListResponse<DocsCategory> }>(
+      'GET',
+      `/collections/${collectionId}/categories`,
+      { api: 'docs', params }
+    );
+  }
+
+  // Articles can be listed by collection OR by category (the Docs API exposes
+  // both paths); pass exactly one. Returns lightweight refs without body text.
+  async listDocsArticles(
+    params: {
+      collectionId?: string;
+      categoryId?: string;
+      status?: string;
+      sort?: string;
+      order?: string;
+      page?: number;
+      pageSize?: number;
+    } = {}
+  ): Promise<{ articles: DocsListResponse<DocsArticleRef> }> {
+    const { collectionId, categoryId, ...query } = params;
+    if (!collectionId && !categoryId) {
+      throw new HelpScoutCliError('listDocsArticles requires collectionId or categoryId', 400);
+    }
+    const path = categoryId
+      ? `/categories/${categoryId}/articles`
+      : `/collections/${collectionId}/articles`;
+    return this.request<{ articles: DocsListResponse<DocsArticleRef> }>('GET', path, {
+      api: 'docs',
+      params: query,
+    });
+  }
+
+  async getDocsArticle(
+    articleIdOrNumber: string,
+    params: { draft?: boolean } = {}
+  ): Promise<{ article: DocsArticle }> {
+    return this.request<{ article: DocsArticle }>('GET', `/articles/${articleIdOrNumber}`, {
+      api: 'docs',
+      params,
+    });
+  }
+
+  async searchDocsArticles(params: {
+    query: string;
+    page?: number;
+    collectionId?: string;
+    siteId?: string;
+    status?: string;
+    visibility?: string;
+  }): Promise<{ articles: DocsListResponse<DocsArticleRef> }> {
+    return this.request<{ articles: DocsListResponse<DocsArticleRef> }>('GET', '/search/articles', {
+      api: 'docs',
+      params,
+    });
+  }
+
+  async listRelatedDocsArticles(
+    articleId: string,
+    params: { page?: number } = {}
+  ): Promise<{ articles: DocsListResponse<DocsArticleRef> }> {
+    return this.request<{ articles: DocsListResponse<DocsArticleRef> }>(
+      'GET',
+      `/articles/${articleId}/related`,
       { api: 'docs', params }
     );
   }

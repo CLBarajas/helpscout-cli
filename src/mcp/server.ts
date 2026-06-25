@@ -2680,6 +2680,132 @@ server.registerTool(
   }
 );
 
+// --- Docs API (knowledge base) — read surface ---
+// Separate API (docsapi.helpscout.net), HTTP Basic auth with the Docs API key.
+// Registered table-driven like EXPANDED_REPORT_TOOLS. Read-only for now; write
+// orchestration stays in the Python Shadow Docs bridge.
+const DOCS_READ_TOOLS: Array<{
+  name: string;
+  title: string;
+  description: string;
+  inputSchema: z.ZodRawShape;
+  run: (params: Record<string, unknown>) => Promise<unknown>;
+}> = [
+  {
+    name: 'docs_list_collections',
+    title: 'List Docs Collections',
+    description:
+      'List Help Scout Docs collections (knowledge base). Reads the Docs API; requires a Docs API key.',
+    inputSchema: {
+      siteId: z.string().optional().describe('Filter by Docs site ID'),
+      visibility: z.string().optional().describe('Filter by visibility (public, private)'),
+      page: z.coerce.number().optional().describe('Page number'),
+    },
+    run: (p) => client.listDocsCollections(p as never),
+  },
+  {
+    name: 'docs_get_collection',
+    title: 'Get Docs Collection',
+    description: 'Get a single Help Scout Docs collection by ID.',
+    inputSchema: { collectionId: z.string().describe('Collection ID') },
+    run: (p) => client.getDocsCollection(p.collectionId as string),
+  },
+  {
+    name: 'docs_list_categories',
+    title: 'List Docs Categories',
+    description: 'List categories within a Docs collection.',
+    inputSchema: {
+      collectionId: z.string().describe('Collection ID'),
+      page: z.coerce.number().optional().describe('Page number'),
+      sort: z
+        .string()
+        .optional()
+        .describe('Sort field (order, name, articleCount, createdAt, updatedAt)'),
+      order: z.string().optional().describe('Sort order (asc, desc)'),
+    },
+    run: ({ collectionId, ...rest }) =>
+      client.listDocsCategories(collectionId as string, rest as never),
+  },
+  {
+    name: 'docs_list_articles',
+    title: 'List Docs Articles',
+    description:
+      'List Docs articles in a collection or category (pass collectionId OR categoryId). Returns lightweight refs without body text — use docs_get_article for the full text.',
+    inputSchema: {
+      collectionId: z
+        .string()
+        .optional()
+        .describe('Collection ID (mutually exclusive with categoryId)'),
+      categoryId: z
+        .string()
+        .optional()
+        .describe('Category ID (mutually exclusive with collectionId)'),
+      status: z.string().optional().describe('Filter by status (all, published, notpublished)'),
+      sort: z
+        .string()
+        .optional()
+        .describe('Sort field (number, status, name, popularity, createdAt, updatedAt)'),
+      order: z.string().optional().describe('Sort order (asc, desc)'),
+      page: z.coerce.number().optional().describe('Page number'),
+      pageSize: z.coerce.number().optional().describe('Results per page (max 100)'),
+    },
+    run: (p) => client.listDocsArticles(p as never),
+  },
+  {
+    name: 'docs_get_article',
+    title: 'Get Docs Article',
+    description: 'Get a single Docs article (including full body text) by ID or number.',
+    inputSchema: {
+      articleId: z.string().describe('Article ID or number'),
+      draft: z
+        .boolean()
+        .optional()
+        .describe('Return the latest draft content instead of the published version'),
+    },
+    run: ({ articleId, draft }) =>
+      client.getDocsArticle(articleId as string, { draft: draft as boolean | undefined }),
+  },
+  {
+    name: 'docs_search_articles',
+    title: 'Search Docs Articles',
+    description: 'Search Help Scout Docs articles by query.',
+    inputSchema: {
+      query: z.string().describe('Search query'),
+      collectionId: z.string().optional().describe('Limit to a collection ID'),
+      siteId: z.string().optional().describe('Limit to a Docs site ID'),
+      status: z.string().optional().describe('Filter by status (published, notpublished)'),
+      visibility: z.string().optional().describe('Filter by visibility (public, private)'),
+      page: z.coerce.number().optional().describe('Page number'),
+    },
+    run: (p) => client.searchDocsArticles(p as never),
+  },
+  {
+    name: 'docs_list_related_articles',
+    title: 'List Related Docs Articles',
+    description: 'List articles related to a given Docs article.',
+    inputSchema: {
+      articleId: z.string().describe('Article ID'),
+      page: z.coerce.number().optional().describe('Page number'),
+    },
+    run: ({ articleId, ...rest }) =>
+      client.listRelatedDocsArticles(articleId as string, rest as never),
+  },
+];
+
+for (const tool of DOCS_READ_TOOLS) {
+  rememberTool(tool.name, tool.description);
+  server.registerTool(
+    tool.name,
+    {
+      title: tool.title,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+      annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+    },
+    async (params) => jsonResponse(await tool.run(params as Record<string, unknown>))
+  );
+}
+
 export async function runMcpServer() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
