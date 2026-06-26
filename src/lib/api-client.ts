@@ -197,6 +197,25 @@ interface DocsCategoryOrderEntry {
   order: number;
 }
 
+interface DocsRevisionAuthor {
+  id: number;
+  firstName?: string;
+  lastName?: string;
+}
+
+// List revisions returns lightweight refs (no body text); the single-revision
+// GET (top-level /revisions/{id}) adds the full `text`.
+interface DocsArticleRevisionRef {
+  id: string;
+  articleId: string;
+  createdBy?: DocsRevisionAuthor;
+  createdAt?: string;
+}
+
+interface DocsArticleRevision extends DocsArticleRevisionRef {
+  text?: string;
+}
+
 interface AuthProvider {
   getAccessToken(): Promise<string | null>;
   setAccessToken(token: string): Promise<boolean>;
@@ -1873,6 +1892,28 @@ export class HelpScoutClient {
     return { collections: withCategories };
   }
 
+  // List a Docs article's revision history (lightweight refs, no body text — use
+  // getDocsArticleRevision for a revision's full text).
+  async listDocsArticleRevisions(
+    articleId: string,
+    params: { page?: number } = {}
+  ): Promise<{ revisions: DocsListResponse<DocsArticleRevisionRef> }> {
+    return this.request<{ revisions: DocsListResponse<DocsArticleRevisionRef> }>(
+      'GET',
+      `/articles/${articleId}/revisions`,
+      { api: 'docs', params }
+    );
+  }
+
+  // Get one revision INCLUDING its full body text. The path is top-level
+  // (/revisions/{id}), NOT nested under /articles — revision ids are globally
+  // addressable.
+  async getDocsArticleRevision(revisionId: string): Promise<{ revision: DocsArticleRevision }> {
+    return this.request<{ revision: DocsArticleRevision }>('GET', `/revisions/${revisionId}`, {
+      api: 'docs',
+    });
+  }
+
   // --- Docs API writes ---
   // Creates POST with params:{reload:true} so the API returns the created object
   // in the body (the proven Docs idiom; requestForCreation is Mailbox-only and
@@ -2027,6 +2068,16 @@ export class HelpScoutClient {
     await this.request<void>('PUT', `/collections/${collectionId}/categories`, {
       api: 'docs',
       body: { categories },
+    });
+  }
+
+  // Increment an article's view count (factors into popularity). Only send
+  // `count` when provided so the server default of 1 applies otherwise. Returns
+  // no body.
+  async incrementDocsArticleViews(articleId: string, count?: number): Promise<void> {
+    await this.request<void>('PUT', `/articles/${articleId}/views`, {
+      api: 'docs',
+      body: count !== undefined ? { count } : {},
     });
   }
 }

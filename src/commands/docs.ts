@@ -523,6 +523,40 @@ export function createDocsCommand(): Command {
         outputJson({ success: true, id, message: 'Draft discarded' });
       })
     );
+  articles
+    .command('revisions')
+    .description('List an article\'s revision history (refs only; use "revision" for body text)')
+    .argument('<articleId>', 'Article ID')
+    .option('--page <number>', 'Page number')
+    .action(
+      withErrorHandling(async (articleId: string, options: { page?: string }) => {
+        const result = await client.listDocsArticleRevisions(articleId, {
+          page: options.page ? parseInt(options.page, 10) : undefined,
+        });
+        outputJson(result);
+      })
+    );
+  articles
+    .command('revision')
+    .description('View a single article revision, including its full body text')
+    .argument('<revisionId>', 'Revision ID (from "articles revisions")')
+    .action(
+      withErrorHandling(async (revisionId: string) => {
+        outputJson(await client.getDocsArticleRevision(revisionId));
+      })
+    );
+  articles
+    .command('increment-views')
+    .description("Increment an article's view count (factors into popularity)")
+    .argument('<articleId>', 'Article ID')
+    .option('--count <number>', 'Number of views to add (default 1)')
+    .action(
+      withErrorHandling(async (articleId: string, options: { count?: string }) => {
+        const count = options.count ? parseInt(options.count, 10) : undefined;
+        await client.incrementDocsArticleViews(articleId, count);
+        outputJson({ success: true, articleId, added: count ?? 1 });
+      })
+    );
   cmd.addCommand(articles);
 
   // --- Tree (discovery) ---

@@ -330,6 +330,31 @@ describe('HelpScoutClient', () => {
     });
   });
 
+  it('gets a single Docs revision from the top-level /revisions path', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ revision: { id: 'r1', articleId: 'a1', text: '<p>old</p>' } })
+    );
+
+    const res = await client.getDocsArticleRevision('r1');
+
+    expect(res.revision.text).toBe('<p>old</p>');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/revisions/r1');
+  });
+
+  it('increments article views, sending count only when provided', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await client.incrementDocsArticleViews('a1', 5);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/articles/a1/views');
+    expect(fetchMock.mock.calls[0][1].method).toBe('PUT');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ count: 5 });
+
+    await client.incrementDocsArticleViews('a1');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({});
+  });
+
   it('reads Docs collections over the Docs API with Basic auth on success', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({

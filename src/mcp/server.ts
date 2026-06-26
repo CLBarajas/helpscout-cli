@@ -2805,6 +2805,28 @@ const DOCS_READ_TOOLS: Array<{
     },
     run: (p) => client.getDocsTree(p as never),
   },
+  {
+    name: 'docs_list_article_revisions',
+    title: 'List Docs Article Revisions',
+    description:
+      "List a Docs article's revision history. Returns lightweight refs (id, articleId, author, timestamp) without body text — use docs_get_article_revision for a revision's full text.",
+    inputSchema: {
+      articleId: z.string().describe('Article ID'),
+      page: z.coerce.number().optional().describe('Page number'),
+    },
+    run: ({ articleId, ...rest }) =>
+      client.listDocsArticleRevisions(articleId as string, rest as never),
+  },
+  {
+    name: 'docs_get_article_revision',
+    title: 'Get Docs Article Revision',
+    description:
+      'Get a single Docs article revision including its full body text. The revisionId comes from docs_list_article_revisions; the endpoint is addressed top-level, not nested under the article.',
+    inputSchema: {
+      revisionId: z.string().describe('Revision ID (from docs_list_article_revisions)'),
+    },
+    run: ({ revisionId }) => client.getDocsArticleRevision(revisionId as string),
+  },
 ];
 
 for (const tool of DOCS_READ_TOOLS) {
@@ -3029,6 +3051,21 @@ const DOCS_WRITE_TOOLS: Array<{
         count: (categories as unknown[]).length,
         message: 'Categories reordered',
       };
+    },
+  },
+  {
+    name: 'docs_increment_article_views',
+    title: 'Increment Docs Article Views',
+    description:
+      "Increment a Docs article's view count by `count` (default 1). Factors into the article's popularity ranking. A write; returns no body.",
+    inputSchema: {
+      articleId: z.string().describe('Article ID'),
+      count: z.coerce.number().optional().describe('Number of views to add (default 1)'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: async ({ articleId, count }) => {
+      await client.incrementDocsArticleViews(articleId as string, count as number | undefined);
+      return { success: true };
     },
   },
 ];
