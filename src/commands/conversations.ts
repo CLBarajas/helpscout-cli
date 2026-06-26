@@ -467,7 +467,7 @@ export function createConversationsCommand(): Command {
     .option('--user <id>', 'User ID adding the note')
     .option(
       '--status <status>',
-      'Set conversation status after adding the note (active, open, pending, closed, spam)'
+      'Conversation status after adding the note (active, open, pending, closed, spam). If omitted, Help Scout treats the note as activity and reopens the conversation to "active"; pass a status (e.g. --status pending) to pin it and avoid reactivation.'
     )
     .action(
       withErrorHandling(
