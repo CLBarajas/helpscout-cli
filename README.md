@@ -185,6 +185,38 @@ helpscout reports ratings --start 2026-01-01T00:00:00Z --end 2026-01-31T23:59:59
 | `--office-hours` | Calculate times within office hours (productivity) |
 | `--view-by` | Data granularity: day, week, month (first-response-time) |
 
+### Docs (Knowledge Base)
+
+The `docs` commands talk to the Help Scout **Docs API** (`docsapi.helpscout.net`), which is
+separate from the Mailbox API and uses its own API key — set it in the keychain
+(`helpscout-cli` / `docs-api-key`) or the `HELPSCOUT_DOCS_API_KEY` environment variable.
+
+```bash
+# Discover the structure — collections and their categories in one call
+helpscout docs tree
+
+# Browse
+helpscout docs collections list
+helpscout docs categories list <collectionId>
+helpscout docs articles list --collection <collectionId>
+helpscout docs articles view <id-or-number>
+helpscout docs articles search "audio capture"
+
+# Write (publishing is always explicit; deletes require --yes)
+helpscout docs articles create --collection <id> --name "Title" --text "<p>…</p>"
+helpscout docs articles update <id> --publish
+helpscout docs articles save-draft <id> --text-file ./draft.html
+helpscout docs articles delete <id> --yes
+
+# Sites and redirects
+helpscout docs sites list
+helpscout docs redirects list <siteId>
+```
+
+Article create defaults to `notpublished` — pass `--publish` (or `--status published`) to
+publish. Collection/category/site/redirect updates and the full surface are documented in
+[`docs/API_COVERAGE.md`](docs/API_COVERAGE.md).
+
 ### MCP Server
 
 Run as an MCP server for AI agent integration:
