@@ -161,6 +161,42 @@ interface DocsArticle extends DocsArticleRef {
   related?: string[];
 }
 
+// Write-body shapes. On article UPDATE, arrays support an explicit null to clear
+// (omitted = preserved, partial merge). Create/update reuse DocsArticle/
+// DocsCollection/DocsCategory as response types via ?reload=true.
+interface DocsArticleWriteBody {
+  collectionId?: string;
+  name?: string;
+  text?: string;
+  slug?: string;
+  status?: 'published' | 'notpublished';
+  categories?: string[] | null;
+  related?: string[] | null;
+  keywords?: string[] | null;
+}
+
+interface DocsCollectionInput {
+  siteId?: string;
+  name: string;
+  visibility?: string;
+  order?: number;
+  description?: string;
+}
+
+interface DocsCategoryInput {
+  collectionId?: string;
+  name: string;
+  slug?: string;
+  visibility?: string;
+  order?: number;
+  defaultSort?: string;
+}
+
+interface DocsCategoryOrderEntry {
+  id: string;
+  order: number;
+}
+
 interface AuthProvider {
   getAccessToken(): Promise<string | null>;
   setAccessToken(token: string): Promise<boolean>;
@@ -1835,6 +1871,163 @@ export class HelpScoutClient {
     );
 
     return { collections: withCategories };
+  }
+
+  // --- Docs API writes ---
+  // Creates POST with params:{reload:true} so the API returns the created object
+  // in the body (the proven Docs idiom; requestForCreation is Mailbox-only and
+  // reads a nonexistent Resource-ID header). Publishing is always explicit —
+  // articles default to 'notpublished'.
+
+  async createDocsArticle(body: {
+    collectionId: string;
+    name: string;
+    text: string;
+    slug?: string;
+    status?: 'published' | 'notpublished';
+    categories?: string[];
+    related?: string[];
+    keywords?: string[];
+  }): Promise<{ article: DocsArticle }> {
+    const payload: DocsArticleWriteBody = { status: 'notpublished', ...body };
+    return this.request<{ article: DocsArticle }>('POST', '/articles', {
+      api: 'docs',
+      body: payload,
+      params: { reload: true },
+    });
+  }
+
+  // PUT /articles/{id} is a PARTIAL MERGE: omitted fields are preserved; an array
+  // sent as null clears it. Send only the keys the caller provided. collectionId
+  // is not updatable here.
+  async updateDocsArticle(
+    articleId: string,
+    body: {
+      name?: string;
+      text?: string;
+      slug?: string;
+      status?: 'published' | 'notpublished';
+      categories?: string[] | null;
+      related?: string[] | null;
+      keywords?: string[] | null;
+    }
+  ): Promise<{ article: DocsArticle }> {
+    return this.request<{ article: DocsArticle }>('PUT', `/articles/${articleId}`, {
+      api: 'docs',
+      body,
+      params: { reload: true },
+    });
+  }
+
+  async deleteDocsArticle(articleId: string): Promise<void> {
+    await this.request<void>('DELETE', `/articles/${articleId}`, { api: 'docs' });
+  }
+
+  // PUT /articles/{id}/drafts — create/update the draft without touching the
+  // published version. NOTE: publishing the article later discards the draft.
+  async saveDocsArticleDraft(articleId: string, text: string): Promise<void> {
+    await this.request<void>('PUT', `/articles/${articleId}/drafts`, {
+      api: 'docs',
+      body: { text },
+    });
+  }
+
+  async deleteDocsArticleDraft(articleId: string): Promise<void> {
+    await this.request<void>('DELETE', `/articles/${articleId}/drafts`, { api: 'docs' });
+  }
+
+  async createDocsCollection(data: DocsCollectionInput): Promise<{ collection: DocsCollection }> {
+    return this.request<{ collection: DocsCollection }>('POST', '/collections', {
+      api: 'docs',
+      body: data,
+      params: { reload: true },
+    });
+  }
+
+  // PUT /collections/{id}. The API requires `name` on every PUT; full-vs-merge is
+  // undocumented, so send only provided fields plus the current name (read if
+  // omitted). If the endpoint is actually full-replace, fields you don't pass may
+  // reset — verify before relying on preservation.
+  async updateDocsCollection(
+    collectionId: string,
+    data: Partial<DocsCollectionInput>
+  ): Promise<{ collection: DocsCollection }> {
+    let name = data.name;
+    if (!name) {
+      const { collection } = await this.getDocsCollection(collectionId);
+      name = collection.name;
+    }
+    const body: DocsCollectionInput = { name };
+    if (data.visibility !== undefined) body.visibility = data.visibility;
+    if (data.order !== undefined) body.order = data.order;
+    if (data.description !== undefined) body.description = data.description;
+    if (data.siteId !== undefined) body.siteId = data.siteId;
+    return this.request<{ collection: DocsCollection }>('PUT', `/collections/${collectionId}`, {
+      api: 'docs',
+      body,
+      params: { reload: true },
+    });
+  }
+
+  async deleteDocsCollection(collectionId: string): Promise<void> {
+    await this.request<void>('DELETE', `/collections/${collectionId}`, { api: 'docs' });
+  }
+
+  async createDocsCategory(data: DocsCategoryInput): Promise<{ category: DocsCategory }> {
+    return this.request<{ category: DocsCategory }>('POST', '/categories', {
+      api: 'docs',
+      body: data,
+      params: { reload: true },
+    });
+  }
+
+  // PUT /categories/{id}. Requires `name`; full-vs-merge undocumented. Send only
+  // provided fields plus the current name (resolved via the collection's category
+  // list, since there is no single-category GET). collectionId is needed only for
+  // that name resolution.
+  async updateDocsCategory(
+    categoryId: string,
+    collectionId: string,
+    data: Partial<Omit<DocsCategoryInput, 'collectionId'>>
+  ): Promise<{ category: DocsCategory }> {
+    let name = data.name;
+    if (!name) {
+      const { categories } = await this.listDocsCategories(collectionId);
+      const current = categories.items.find((c) => c.id === categoryId);
+      if (!current) {
+        throw new HelpScoutCliError(
+          `Category ${categoryId} not found in collection ${collectionId}`,
+          404
+        );
+      }
+      name = current.name;
+    }
+    const body: Omit<DocsCategoryInput, 'collectionId'> = { name };
+    if (data.slug !== undefined) body.slug = data.slug;
+    if (data.visibility !== undefined) body.visibility = data.visibility;
+    if (data.order !== undefined) body.order = data.order;
+    if (data.defaultSort !== undefined) body.defaultSort = data.defaultSort;
+    return this.request<{ category: DocsCategory }>('PUT', `/categories/${categoryId}`, {
+      api: 'docs',
+      body,
+      params: { reload: true },
+    });
+  }
+
+  async deleteDocsCategory(categoryId: string): Promise<void> {
+    await this.request<void>('DELETE', `/categories/${categoryId}`, { api: 'docs' });
+  }
+
+  // PUT /collections/{id}/categories — REORDER. Shares its path with the list GET;
+  // only the verb + body differ. Body is { categories: [{ id, order }] }.
+  async reorderDocsCategories(
+    collectionId: string,
+    categories: DocsCategoryOrderEntry[]
+  ): Promise<void> {
+    await this.request<void>('PUT', `/collections/${collectionId}/categories`, {
+      api: 'docs',
+      body: { categories },
+    });
   }
 }
 

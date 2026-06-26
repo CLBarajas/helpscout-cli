@@ -1718,7 +1718,7 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          'Optionally set the conversation status after adding the note (active, open, pending, closed, spam)'
+          'Set the conversation status after adding the note (active, open, pending, closed, spam). If omitted, Help Scout treats the note as activity and reopens the conversation to "active"; pass a status (e.g. "pending") to pin it and avoid reactivation.'
         ),
     },
     outputSchema: noteOutputSchema,
@@ -2816,6 +2816,232 @@ for (const tool of DOCS_READ_TOOLS) {
       description: tool.description,
       inputSchema: tool.inputSchema,
       annotations: READ_ONLY_REMOTE_ANNOTATIONS,
+    },
+    async (params) => jsonResponse(await tool.run(params as Record<string, unknown>))
+  );
+}
+
+// --- Docs API (knowledge base) — write surface ---
+// Separate table because each entry carries its own annotation (mutating vs
+// destructive). Publishing is always explicit: article create defaults to
+// 'notpublished'; pass status:'published' to publish (and note that publishing
+// discards any draft).
+const DOCS_WRITE_TOOLS: Array<{
+  name: string;
+  title: string;
+  description: string;
+  inputSchema: z.ZodRawShape;
+  annotations: typeof MUTATING_REMOTE_ANNOTATIONS | typeof DESTRUCTIVE_REMOTE_ANNOTATIONS;
+  run: (params: Record<string, unknown>) => Promise<unknown>;
+}> = [
+  {
+    name: 'docs_create_article',
+    title: 'Create Docs Article',
+    description:
+      'Create a Help Scout Docs article. collectionId, name, and text are required. PUBLISH SAFETY: status defaults to "notpublished" — pass status:"published" only when the article should go live. Returns the created article.',
+    inputSchema: {
+      collectionId: z.string().describe('Collection ID the article belongs to'),
+      name: z.string().describe('Article name (must be unique within the collection)'),
+      text: z.string().describe('Article body (plain text or HTML)'),
+      slug: z.string().optional().describe('SEO slug (auto-generated from name if omitted)'),
+      status: z
+        .enum(['published', 'notpublished'])
+        .optional()
+        .describe('Defaults to "notpublished"; set "published" only to publish.'),
+      categories: z.array(z.string()).optional().describe('Category ID(s) to associate'),
+      related: z.array(z.string()).optional().describe('Related article ID(s)'),
+      keywords: z.array(z.string()).optional().describe('Keyword(s)'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: (p) => client.createDocsArticle(p as never),
+  },
+  {
+    name: 'docs_update_article',
+    title: 'Update Docs Article',
+    description:
+      'Update a Help Scout Docs article. PARTIAL MERGE: only the fields you pass change; omitted fields are preserved. PUBLISH SAFETY: pass status:"published" only to make it live. collectionId cannot be changed here.',
+    inputSchema: {
+      articleId: z.string().describe('Article ID'),
+      name: z.string().optional().describe('New article name'),
+      text: z.string().optional().describe('New article body (plain text or HTML)'),
+      slug: z.string().optional().describe('New SEO slug'),
+      status: z
+        .enum(['published', 'notpublished'])
+        .optional()
+        .describe('Set status. Pass "published" only to publish.'),
+      categories: z.array(z.string()).optional().describe('Replace category association(s)'),
+      related: z.array(z.string()).optional().describe('Replace related article ID(s)'),
+      keywords: z.array(z.string()).optional().describe('Replace keyword(s)'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: ({ articleId, ...rest }) => client.updateDocsArticle(articleId as string, rest as never),
+  },
+  {
+    name: 'docs_delete_article',
+    title: 'Delete Docs Article',
+    description: 'Permanently delete a Help Scout Docs article by ID. This cannot be undone.',
+    inputSchema: { articleId: z.string().describe('Article ID') },
+    annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS,
+    run: async ({ articleId }) => {
+      await client.deleteDocsArticle(articleId as string);
+      return { success: true, message: 'Article deleted' };
+    },
+  },
+  {
+    name: 'docs_save_article_draft',
+    title: 'Save Docs Article Draft',
+    description:
+      "Create or update a Docs article's draft body. The published version is NOT affected. Note: publishing the article (status:\"published\") discards the draft.",
+    inputSchema: {
+      articleId: z.string().describe('Article ID'),
+      text: z.string().describe('Draft body (plain text or HTML)'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: async ({ articleId, text }) => {
+      await client.saveDocsArticleDraft(articleId as string, text as string);
+      return { success: true, message: 'Draft saved' };
+    },
+  },
+  {
+    name: 'docs_delete_article_draft',
+    title: 'Delete Docs Article Draft',
+    description:
+      "Discard a Docs article's draft. The published version is untouched. This cannot be undone.",
+    inputSchema: { articleId: z.string().describe('Article ID') },
+    annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS,
+    run: async ({ articleId }) => {
+      await client.deleteDocsArticleDraft(articleId as string);
+      return { success: true, message: 'Draft discarded' };
+    },
+  },
+  {
+    name: 'docs_create_collection',
+    title: 'Create Docs Collection',
+    description:
+      'Create a Help Scout Docs collection. siteId and name are required; the name must be UNIQUE across the Docs account (a duplicate name errors).',
+    inputSchema: {
+      siteId: z.string().describe('Docs site ID the collection belongs to'),
+      name: z.string().describe('Collection name (must be unique per account)'),
+      visibility: z.string().optional().describe('Visibility (public, private)'),
+      order: z.coerce.number().optional().describe('Display order'),
+      description: z.string().optional().describe('Description'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: (p) => client.createDocsCollection(p as never),
+  },
+  {
+    name: 'docs_update_collection',
+    title: 'Update Docs Collection',
+    description:
+      'Update a Help Scout Docs collection. The API requires name on every PUT, so this reads the current name when you omit it. Full-vs-merge is undocumented — pass the fields you want set. Pass siteId to move the collection to a different site.',
+    inputSchema: {
+      collectionId: z.string().describe('Collection ID'),
+      name: z.string().optional().describe('Collection name (must be unique per account)'),
+      visibility: z.string().optional().describe('Visibility (public, private)'),
+      order: z.coerce.number().optional().describe('Display order'),
+      description: z.string().optional().describe('Description'),
+      siteId: z.string().optional().describe('Move the collection to a different Docs site ID'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: ({ collectionId, ...rest }) =>
+      client.updateDocsCollection(collectionId as string, rest as never),
+  },
+  {
+    name: 'docs_delete_collection',
+    title: 'Delete Docs Collection',
+    description:
+      'Delete a Help Scout Docs collection by ID. DESTRUCTIVE: this also removes every category and article inside the collection.',
+    inputSchema: { collectionId: z.string().describe('Collection ID') },
+    annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS,
+    run: async ({ collectionId }) => {
+      await client.deleteDocsCollection(collectionId as string);
+      return { success: true, message: 'Collection deleted' };
+    },
+  },
+  {
+    name: 'docs_create_category',
+    title: 'Create Docs Category',
+    description:
+      'Create a category in a Help Scout Docs collection. collectionId and name are required; the name must be UNIQUE within that collection.',
+    inputSchema: {
+      collectionId: z.string().describe('Collection ID the category belongs to'),
+      name: z.string().describe('Category name (must be unique within the collection)'),
+      slug: z.string().optional().describe('SEO-friendly URL slug'),
+      visibility: z.string().optional().describe('Visibility (public, private)'),
+      order: z.coerce.number().optional().describe('Display order'),
+      defaultSort: z.string().optional().describe('Default article sort (popularity, name)'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: (p) => client.createDocsCategory(p as never),
+  },
+  {
+    name: 'docs_update_category',
+    title: 'Update Docs Category',
+    description:
+      'Update a Help Scout Docs category. collectionId is required to resolve current values (there is no single-category GET). The API requires name on every PUT; full-vs-merge is undocumented — pass the fields you want set.',
+    inputSchema: {
+      categoryId: z.string().describe('Category ID'),
+      collectionId: z.string().describe('Collection ID the category belongs to'),
+      name: z.string().optional().describe('Category name (must be unique within the collection)'),
+      slug: z.string().optional().describe('SEO-friendly URL slug'),
+      visibility: z.string().optional().describe('Visibility (public, private)'),
+      order: z.coerce.number().optional().describe('Display order'),
+      defaultSort: z.string().optional().describe('Default article sort (popularity, name)'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: ({ categoryId, collectionId, ...rest }) =>
+      client.updateDocsCategory(categoryId as string, collectionId as string, rest as never),
+  },
+  {
+    name: 'docs_delete_category',
+    title: 'Delete Docs Category',
+    description:
+      "Delete a Help Scout Docs category by ID. DESTRUCTIVE. Help Scout does not document whether the category's articles are deleted or merely unassigned.",
+    inputSchema: { categoryId: z.string().describe('Category ID') },
+    annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS,
+    run: async ({ categoryId }) => {
+      await client.deleteDocsCategory(categoryId as string);
+      return { success: true, message: 'Category deleted' };
+    },
+  },
+  {
+    name: 'docs_reorder_categories',
+    title: 'Reorder Docs Categories',
+    description:
+      'Reorder the categories within a Help Scout Docs collection. Pass an ordered list of { id, order } entries (order is 1-based).',
+    inputSchema: {
+      collectionId: z.string().describe('Collection ID'),
+      categories: z
+        .array(
+          z.object({
+            id: z.string().describe('Category ID'),
+            order: z.coerce.number().describe('1-based display position'),
+          })
+        )
+        .describe('Ordered list of { id, order } entries'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: async ({ collectionId, categories }) => {
+      await client.reorderDocsCategories(collectionId as string, categories as never);
+      return {
+        success: true,
+        collectionId,
+        count: (categories as unknown[]).length,
+        message: 'Categories reordered',
+      };
+    },
+  },
+];
+
+for (const tool of DOCS_WRITE_TOOLS) {
+  rememberTool(tool.name, tool.description);
+  server.registerTool(
+    tool.name,
+    {
+      title: tool.title,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+      annotations: tool.annotations,
     },
     async (params) => jsonResponse(await tool.run(params as Record<string, unknown>))
   );

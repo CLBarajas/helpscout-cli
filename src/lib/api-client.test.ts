@@ -268,6 +268,68 @@ describe('HelpScoutClient', () => {
     );
   });
 
+  it('creates a Docs article defaulting to notpublished, returning the created article', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ article: { id: 'a1', name: 'Hi', status: 'notpublished' } })
+    );
+
+    const res = await client.createDocsArticle({ collectionId: 'c1', name: 'Hi', text: '<p>hi</p>' });
+
+    expect(res.article.id).toBe('a1');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/articles?reload=true');
+    const init = fetchMock.mock.calls[0][1];
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      collectionId: 'c1',
+      name: 'Hi',
+      text: '<p>hi</p>',
+      status: 'notpublished',
+    });
+  });
+
+  it('updates a Docs article with only the provided fields (partial merge)', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ article: { id: 'a1', name: 'New' } }));
+
+    await client.updateDocsArticle('a1', { name: 'New' });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://docsapi.helpscout.net/v1/articles/a1?reload=true'
+    );
+    const init = fetchMock.mock.calls[0][1];
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body as string)).toEqual({ name: 'New' });
+  });
+
+  it('deletes a Docs article with a DELETE to the article path', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await client.deleteDocsArticle('a1');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/articles/a1');
+    expect(fetchMock.mock.calls[0][1].method).toBe('DELETE');
+  });
+
+  it('reorders Docs categories with a { categories: [{id,order}] } body', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await client.reorderDocsCategories('c1', [
+      { id: 'x', order: 1 },
+      { id: 'y', order: 2 },
+    ]);
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://docsapi.helpscout.net/v1/collections/c1/categories'
+    );
+    const init = fetchMock.mock.calls[0][1];
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body as string)).toEqual({
+      categories: [
+        { id: 'x', order: 1 },
+        { id: 'y', order: 2 },
+      ],
+    });
+  });
+
   it('reads Docs collections over the Docs API with Basic auth on success', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({
