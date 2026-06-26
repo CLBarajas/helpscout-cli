@@ -1786,6 +1786,56 @@ export class HelpScoutClient {
       { api: 'docs', params }
     );
   }
+
+  /** Walk every page of a Docs list endpoint and return the flattened items. */
+  private async fetchAllDocsPages<T>(
+    fetchPage: (page: number) => Promise<DocsListResponse<T>>
+  ): Promise<T[]> {
+    const items: T[] = [];
+    let page = 1;
+    let pages = 1;
+    do {
+      const result = await fetchPage(page);
+      items.push(...result.items);
+      pages = result.pages || 1;
+      page += 1;
+    } while (page <= pages);
+    return items;
+  }
+
+  // Discovery aid: the full collection -> category hierarchy in one call (every
+  // page walked). Scope to one collection with collectionId, which accepts the
+  // id OR the short number — it resolves the collection first, then uses its
+  // real id for the nested category lookup (the API restricts that path to
+  // 24-char ids, so the number wouldn't work there directly).
+  async getDocsTree(
+    options: { collectionId?: string; siteId?: string; visibility?: string } = {}
+  ): Promise<{ collections: Array<DocsCollection & { categories: DocsCategory[] }> }> {
+    let collections: DocsCollection[];
+    if (options.collectionId) {
+      const { collection } = await this.getDocsCollection(options.collectionId);
+      collections = [collection];
+    } else {
+      collections = await this.fetchAllDocsPages((page) =>
+        this.listDocsCollections({
+          siteId: options.siteId,
+          visibility: options.visibility,
+          page,
+        }).then((r) => r.collections)
+      );
+    }
+
+    const withCategories = await Promise.all(
+      collections.map(async (collection) => ({
+        ...collection,
+        categories: await this.fetchAllDocsPages((page) =>
+          this.listDocsCategories(collection.id, { page }).then((r) => r.categories)
+        ),
+      }))
+    );
+
+    return { collections: withCategories };
+  }
 }
 
 export const client = new HelpScoutClient();

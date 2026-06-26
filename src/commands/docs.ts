@@ -162,5 +162,48 @@ export function createDocsCommand(): Command {
     );
   cmd.addCommand(articles);
 
+  // --- Tree (discovery) ---
+  cmd
+    .command('tree')
+    .description('Show the collection → category hierarchy in one call (ids, numbers, slugs)')
+    .argument('[collectionId]', 'Optional collection ID or number to scope the tree to one collection')
+    .option('--site <id>', 'Filter by Docs site ID')
+    .option('--visibility <visibility>', 'Filter by visibility (public, private)')
+    .option('--full', 'Return full collection/category objects instead of the trimmed discovery view')
+    .action(
+      withErrorHandling(
+        async (
+          collectionId: string | undefined,
+          options: { site?: string; visibility?: string; full?: boolean }
+        ) => {
+          const { collections } = await client.getDocsTree({
+            collectionId,
+            siteId: options.site,
+            visibility: options.visibility,
+          });
+          if (options.full) {
+            outputJson({ collections });
+            return;
+          }
+          outputJson({
+            collections: collections.map((c) => ({
+              id: c.id,
+              number: c.number,
+              slug: c.slug,
+              name: c.name,
+              articleCount: c.articleCount,
+              categories: c.categories.map((cat) => ({
+                id: cat.id,
+                number: cat.number,
+                slug: cat.slug,
+                name: cat.name,
+                articleCount: cat.articleCount,
+              })),
+            })),
+          });
+        }
+      )
+    );
+
   return cmd;
 }

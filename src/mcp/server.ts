@@ -2790,6 +2790,21 @@ const DOCS_READ_TOOLS: Array<{
     run: ({ articleId, ...rest }) =>
       client.listRelatedDocsArticles(articleId as string, rest as never),
   },
+  {
+    name: 'docs_tree',
+    title: 'Get Docs Tree',
+    description:
+      'Discovery aid: the full Docs collection → category hierarchy (ids, numbers, slugs, counts) in one call, with every page walked. Scope to one collection with collectionId (accepts the id or the short number).',
+    inputSchema: {
+      collectionId: z
+        .string()
+        .optional()
+        .describe('Optional collection ID or number to scope the tree to one collection'),
+      siteId: z.string().optional().describe('Filter by Docs site ID'),
+      visibility: z.string().optional().describe('Filter by visibility (public, private)'),
+    },
+    run: (p) => client.getDocsTree(p as never),
+  },
 ];
 
 for (const tool of DOCS_READ_TOOLS) {

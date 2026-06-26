@@ -232,6 +232,42 @@ describe('HelpScoutClient', () => {
     );
   });
 
+  it('builds a Docs tree, walking every category page per collection', async () => {
+    fetchMock
+      // collections list (single page)
+      .mockResolvedValueOnce(
+        Response.json({
+          collections: { page: 1, pages: 1, count: 1, items: [{ id: 'col1', name: 'Shadow KB' }] },
+        })
+      )
+      // col1 categories — page 1 of 2
+      .mockResolvedValueOnce(
+        Response.json({
+          categories: { page: 1, pages: 2, count: 2, items: [{ id: 'cat1', name: 'Mac' }] },
+        })
+      )
+      // col1 categories — page 2 of 2
+      .mockResolvedValueOnce(
+        Response.json({
+          categories: { page: 2, pages: 2, count: 2, items: [{ id: 'cat2', name: 'Windows' }] },
+        })
+      );
+
+    const tree = await client.getDocsTree();
+
+    expect(tree.collections).toHaveLength(1);
+    expect(tree.collections[0].id).toBe('col1');
+    expect(tree.collections[0].categories.map((c) => c.id)).toEqual(['cat1', 'cat2']);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/collections?page=1');
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      'https://docsapi.helpscout.net/v1/collections/col1/categories?page=1'
+    );
+    expect(fetchMock.mock.calls[2][0]).toBe(
+      'https://docsapi.helpscout.net/v1/collections/col1/categories?page=2'
+    );
+  });
+
   it('reads Docs collections over the Docs API with Basic auth on success', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({
