@@ -2827,6 +2827,56 @@ const DOCS_READ_TOOLS: Array<{
     },
     run: ({ revisionId }) => client.getDocsArticleRevision(revisionId as string),
   },
+  {
+    name: 'docs_list_sites',
+    title: 'List Docs Sites',
+    description: 'List Help Scout Docs sites. Reads the Docs API; requires a Docs API key.',
+    inputSchema: { page: z.coerce.number().optional().describe('Page number') },
+    run: (p) => client.listDocsSites(p as never),
+  },
+  {
+    name: 'docs_get_site',
+    title: 'Get Docs Site',
+    description: 'Get a single Help Scout Docs site by ID.',
+    inputSchema: { siteId: z.string().describe('Site ID') },
+    run: (p) => client.getDocsSite(p.siteId as string),
+  },
+  {
+    name: 'docs_get_site_restrictions',
+    title: 'Get Docs Site Restrictions',
+    description:
+      'Get restricted-Docs settings for a Docs site (enabled, authentication, callback sign-in URL). Note the path asymmetry: this reads /restrictions; the update writes /restricted.',
+    inputSchema: { siteId: z.string().describe('Site ID') },
+    run: (p) => client.getDocsSiteRestrictions(p.siteId as string),
+  },
+  {
+    name: 'docs_list_redirects',
+    title: 'List Docs Redirects',
+    description: 'List redirects for a Docs site (by site ID).',
+    inputSchema: {
+      siteId: z.string().describe('Site ID'),
+      page: z.coerce.number().optional().describe('Page number'),
+    },
+    run: ({ siteId, ...rest }) => client.listDocsRedirects(siteId as string, rest as never),
+  },
+  {
+    name: 'docs_get_redirect',
+    title: 'Get Docs Redirect',
+    description: 'Get a single Docs redirect by ID.',
+    inputSchema: { redirectId: z.string().describe('Redirect ID') },
+    run: (p) => client.getDocsRedirect(p.redirectId as string),
+  },
+  {
+    name: 'docs_find_redirect',
+    title: 'Find Docs Redirect',
+    description:
+      'Resolve a single URL path to its redirect target on a Docs site. Distinct from docs_list_redirects: returns the resolved target (redirectedUrl) or null when no redirect matches. Both url and siteId are required.',
+    inputSchema: {
+      url: z.string().describe('URL path to resolve (e.g. /old/path/1234)'),
+      siteId: z.string().describe('Site ID'),
+    },
+    run: (p) => client.findDocsRedirect(p as never),
+  },
 ];
 
 for (const tool of DOCS_READ_TOOLS) {
@@ -3066,6 +3116,128 @@ const DOCS_WRITE_TOOLS: Array<{
     run: async ({ articleId, count }) => {
       await client.incrementDocsArticleViews(articleId as string, count as number | undefined);
       return { success: true };
+    },
+  },
+  {
+    name: 'docs_create_site',
+    title: 'Create Docs Site',
+    description:
+      'Create a Help Scout Docs site. Requires subDomain and title. Returns the created site.',
+    inputSchema: {
+      subDomain: z.string().describe('Subdomain (required)'),
+      title: z.string().describe('Site title (required)'),
+      status: z.string().optional().describe('Site status'),
+      cname: z.string().optional().describe('Custom domain (CNAME)'),
+      hasPublicSite: z.boolean().optional().describe('Make the site public'),
+      homeUrl: z.string().optional().describe('Home URL'),
+      bgColor: z.string().optional().describe('Background color'),
+      description: z.string().optional().describe('Site description'),
+      hasContactForm: z.boolean().optional().describe('Enable the contact form'),
+      mailboxId: z.coerce.number().optional().describe('Mailbox ID for the contact form'),
+      contactEmail: z.string().optional().describe('Contact email'),
+      styleSheetUrl: z.string().optional().describe('Custom stylesheet URL'),
+      headerCode: z.string().optional().describe('Custom header code'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: (p) => client.createDocsSite(p as never),
+  },
+  {
+    name: 'docs_update_site',
+    title: 'Update Docs Site',
+    description:
+      'Update a Help Scout Docs site. FULL REPLACE: omitted fields are cleared — get the site first and send the complete field set. Requires subDomain and title.',
+    inputSchema: {
+      siteId: z.string().describe('Site ID'),
+      subDomain: z.string().describe('Subdomain (required)'),
+      title: z.string().describe('Site title (required)'),
+      status: z.string().optional().describe('Site status'),
+      cname: z.string().optional().describe('Custom domain (CNAME)'),
+      hasPublicSite: z.boolean().optional().describe('Make the site public'),
+      homeUrl: z.string().optional().describe('Home URL'),
+      bgColor: z.string().optional().describe('Background color'),
+      description: z.string().optional().describe('Site description'),
+      hasContactForm: z.boolean().optional().describe('Enable the contact form'),
+      mailboxId: z.coerce.number().optional().describe('Mailbox ID for the contact form'),
+      contactEmail: z.string().optional().describe('Contact email'),
+      styleSheetUrl: z.string().optional().describe('Custom stylesheet URL'),
+      headerCode: z.string().optional().describe('Custom header code'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: ({ siteId, ...rest }) => client.updateDocsSite(siteId as string, rest as never),
+  },
+  {
+    name: 'docs_delete_site',
+    title: 'Delete Docs Site',
+    description:
+      'Delete a Help Scout Docs site. DESTRUCTIVE: permanently removes the site and its content.',
+    inputSchema: { siteId: z.string().describe('Site ID') },
+    annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS,
+    run: async ({ siteId }) => {
+      await client.deleteDocsSite(siteId as string);
+      return { success: true, message: 'Site deleted' };
+    },
+  },
+  {
+    name: 'docs_update_site_restrictions',
+    title: 'Update Docs Site Restrictions',
+    description:
+      'Update restricted-Docs settings for a Docs site. Note the path asymmetry (this PUTs /restricted; the read uses /restrictions). The response includes the sharedSecret used to sign the restricted-Docs JWT.',
+    inputSchema: {
+      siteId: z.string().describe('Site ID'),
+      enabled: z.boolean().describe('Enable restricted Docs'),
+      authentication: z.string().optional().describe('Authentication type (CALLBACK)'),
+      signInUrl: z.string().optional().describe('Callback sign-in URL'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: ({ siteId, enabled, authentication, signInUrl }) =>
+      client.updateDocsSiteRestrictions(siteId as string, {
+        enabled: enabled as boolean,
+        authentication: authentication as string | undefined,
+        callbackConfiguration: signInUrl ? { signInUrl: signInUrl as string } : undefined,
+      }),
+  },
+  {
+    name: 'docs_create_redirect',
+    title: 'Create Docs Redirect',
+    description:
+      'Create a Docs redirect. Requires siteId, urlMapping, and redirect. Returns the created redirect.',
+    inputSchema: {
+      siteId: z.string().describe('Site ID (required)'),
+      urlMapping: z.string().describe('Source path to redirect from (required)'),
+      redirect: z.string().describe('Destination URL (required)'),
+      type: z.string().optional().describe('Redirect type'),
+      documentId: z.string().optional().describe('Target document ID'),
+      anchor: z.string().optional().describe('Anchor/fragment'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: (p) => client.createDocsRedirect(p as never),
+  },
+  {
+    name: 'docs_update_redirect',
+    title: 'Update Docs Redirect',
+    description:
+      'Update a Docs redirect. FULL REPLACE: siteId, urlMapping, and redirect must all be provided.',
+    inputSchema: {
+      redirectId: z.string().describe('Redirect ID'),
+      siteId: z.string().describe('Site ID (required)'),
+      urlMapping: z.string().describe('Source path to redirect from (required)'),
+      redirect: z.string().describe('Destination URL (required)'),
+      type: z.string().optional().describe('Redirect type'),
+      documentId: z.string().optional().describe('Target document ID'),
+      anchor: z.string().optional().describe('Anchor/fragment'),
+    },
+    annotations: MUTATING_REMOTE_ANNOTATIONS,
+    run: ({ redirectId, ...rest }) => client.updateDocsRedirect(redirectId as string, rest as never),
+  },
+  {
+    name: 'docs_delete_redirect',
+    title: 'Delete Docs Redirect',
+    description: 'Delete a Docs redirect. DESTRUCTIVE: permanently removes the redirect.',
+    inputSchema: { redirectId: z.string().describe('Redirect ID') },
+    annotations: DESTRUCTIVE_REMOTE_ANNOTATIONS,
+    run: async ({ redirectId }) => {
+      await client.deleteDocsRedirect(redirectId as string);
+      return { success: true, message: 'Redirect deleted' };
     },
   },
 ];

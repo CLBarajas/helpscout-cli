@@ -602,5 +602,265 @@ export function createDocsCommand(): Command {
       )
     );
 
+  // --- Sites ---
+  const sites = new Command('sites').description('Docs site operations');
+  sites
+    .command('list')
+    .description('List Docs sites')
+    .option('--page <number>', 'Page number')
+    .action(
+      withErrorHandling(async (options: { page?: string }) => {
+        outputJson(
+          await client.listDocsSites({ page: options.page ? parseInt(options.page, 10) : undefined })
+        );
+      })
+    );
+  sites
+    .command('view')
+    .description('View a Docs site')
+    .argument('<id>', 'Site ID')
+    .action(
+      withErrorHandling(async (id: string) => {
+        outputJson(await client.getDocsSite(id));
+      })
+    );
+  const applySiteOptions = (c: Command): Command =>
+    c
+      .requiredOption('--subdomain <subdomain>', 'Subdomain (required)')
+      .requiredOption('--title <title>', 'Site title (required)')
+      .option('--status <status>', 'Site status')
+      .option('--cname <cname>', 'Custom domain (CNAME)')
+      .option('--has-public-site', 'Make the site public')
+      .option('--logo-url <url>', 'Logo URL')
+      .option('--fav-icon-url <url>', 'Favicon URL')
+      .option('--touch-icon-url <url>', 'Touch icon URL')
+      .option('--home-url <url>', 'Home URL')
+      .option('--home-link-text <text>', 'Home link text')
+      .option('--bg-color <color>', 'Background color')
+      .option('--description <text>', 'Site description')
+      .option('--has-contact-form', 'Enable the contact form')
+      .option('--mailbox-id <number>', 'Mailbox ID for the contact form')
+      .option('--contact-email <email>', 'Contact email')
+      .option('--style-sheet-url <url>', 'Custom stylesheet URL')
+      .option('--header-code <code>', 'Custom header code');
+  type SiteOptions = {
+    subdomain: string;
+    title: string;
+    status?: string;
+    cname?: string;
+    hasPublicSite?: boolean;
+    logoUrl?: string;
+    favIconUrl?: string;
+    touchIconUrl?: string;
+    homeUrl?: string;
+    homeLinkText?: string;
+    bgColor?: string;
+    description?: string;
+    hasContactForm?: boolean;
+    mailboxId?: string;
+    contactEmail?: string;
+    styleSheetUrl?: string;
+    headerCode?: string;
+  };
+  const siteInputFromOptions = (options: SiteOptions) => ({
+    subDomain: options.subdomain,
+    title: options.title,
+    status: options.status,
+    cname: options.cname,
+    hasPublicSite: options.hasPublicSite,
+    logoUrl: options.logoUrl,
+    favIconUrl: options.favIconUrl,
+    touchIconUrl: options.touchIconUrl,
+    homeUrl: options.homeUrl,
+    homeLinkText: options.homeLinkText,
+    bgColor: options.bgColor,
+    description: options.description,
+    hasContactForm: options.hasContactForm,
+    mailboxId: options.mailboxId ? parseInt(options.mailboxId, 10) : undefined,
+    contactEmail: options.contactEmail,
+    styleSheetUrl: options.styleSheetUrl,
+    headerCode: options.headerCode,
+  });
+  applySiteOptions(sites.command('create').description('Create a Docs site')).action(
+    withErrorHandling(async (options: SiteOptions) => {
+      outputJson(await client.createDocsSite(siteInputFromOptions(options)));
+    })
+  );
+  applySiteOptions(
+    sites
+      .command('update')
+      .description('Update a Docs site (FULL REPLACE — send the complete field set)')
+      .argument('<id>', 'Site ID')
+  ).action(
+    withErrorHandling(async (id: string, options: SiteOptions) => {
+      outputJson(await client.updateDocsSite(id, siteInputFromOptions(options)));
+    })
+  );
+  sites
+    .command('delete')
+    .description('Delete a Docs site (DESTRUCTIVE — removes the site and its content)')
+    .argument('<id>', 'Site ID')
+    .option('--yes', 'Confirm the deletion (required)')
+    .action(
+      withErrorHandling(async (id: string, options: { yes?: boolean }) => {
+        if (!options.yes) {
+          outputJson({ error: 'Refusing to delete without --yes' });
+          return;
+        }
+        await client.deleteDocsSite(id);
+        outputJson({ success: true, id, message: 'Site deleted' });
+      })
+    );
+  sites
+    .command('restrictions')
+    .description('View restricted-Docs settings for a site')
+    .argument('<id>', 'Site ID')
+    .action(
+      withErrorHandling(async (id: string) => {
+        outputJson(await client.getDocsSiteRestrictions(id));
+      })
+    );
+  sites
+    .command('set-restrictions')
+    .description('Update restricted-Docs settings (returns the JWT signing sharedSecret)')
+    .argument('<id>', 'Site ID')
+    .requiredOption('--enabled <bool>', 'Enable restricted Docs (true/false)')
+    .option('--authentication <type>', 'Authentication type (CALLBACK)', 'CALLBACK')
+    .option('--sign-in-url <url>', 'Callback sign-in URL')
+    .action(
+      withErrorHandling(
+        async (id: string, options: { enabled: string; authentication?: string; signInUrl?: string }) => {
+          outputJson(
+            await client.updateDocsSiteRestrictions(id, {
+              enabled: options.enabled === 'true',
+              authentication: options.authentication,
+              callbackConfiguration: options.signInUrl ? { signInUrl: options.signInUrl } : undefined,
+            })
+          );
+        }
+      )
+    );
+  cmd.addCommand(sites);
+
+  // --- Redirects ---
+  const redirects = new Command('redirects').description('Docs redirect operations');
+  redirects
+    .command('list')
+    .description('List redirects for a Docs site')
+    .argument('<siteId>', 'Site ID')
+    .option('--page <number>', 'Page number')
+    .action(
+      withErrorHandling(async (siteId: string, options: { page?: string }) => {
+        outputJson(
+          await client.listDocsRedirects(siteId, {
+            page: options.page ? parseInt(options.page, 10) : undefined,
+          })
+        );
+      })
+    );
+  redirects
+    .command('view')
+    .description('View a Docs redirect')
+    .argument('<id>', 'Redirect ID')
+    .action(
+      withErrorHandling(async (id: string) => {
+        outputJson(await client.getDocsRedirect(id));
+      })
+    );
+  redirects
+    .command('find')
+    .description('Resolve a single URL path to its redirect target on a site')
+    .requiredOption('--url <path>', 'URL path to resolve (e.g. /old/path/1234)')
+    .requiredOption('--site <id>', 'Site ID')
+    .action(
+      withErrorHandling(async (options: { url: string; site: string }) => {
+        outputJson(await client.findDocsRedirect({ url: options.url, siteId: options.site }));
+      })
+    );
+  redirects
+    .command('create')
+    .description('Create a Docs redirect')
+    .requiredOption('--site <id>', 'Site ID (required)')
+    .requiredOption('--url-mapping <path>', 'Source path to redirect from (required)')
+    .requiredOption('--redirect <url>', 'Destination URL (required)')
+    .option('--type <type>', 'Redirect type')
+    .option('--document-id <id>', 'Target document ID')
+    .option('--anchor <anchor>', 'Anchor/fragment')
+    .action(
+      withErrorHandling(
+        async (options: {
+          site: string;
+          urlMapping: string;
+          redirect: string;
+          type?: string;
+          documentId?: string;
+          anchor?: string;
+        }) => {
+          outputJson(
+            await client.createDocsRedirect({
+              siteId: options.site,
+              urlMapping: options.urlMapping,
+              redirect: options.redirect,
+              type: options.type,
+              documentId: options.documentId,
+              anchor: options.anchor,
+            })
+          );
+        }
+      )
+    );
+  redirects
+    .command('update')
+    .description('Update a Docs redirect (FULL REPLACE — send site, url-mapping, and redirect)')
+    .argument('<id>', 'Redirect ID')
+    .requiredOption('--site <id>', 'Site ID (required)')
+    .requiredOption('--url-mapping <path>', 'Source path to redirect from (required)')
+    .requiredOption('--redirect <url>', 'Destination URL (required)')
+    .option('--type <type>', 'Redirect type')
+    .option('--document-id <id>', 'Target document ID')
+    .option('--anchor <anchor>', 'Anchor/fragment')
+    .action(
+      withErrorHandling(
+        async (
+          id: string,
+          options: {
+            site: string;
+            urlMapping: string;
+            redirect: string;
+            type?: string;
+            documentId?: string;
+            anchor?: string;
+          }
+        ) => {
+          outputJson(
+            await client.updateDocsRedirect(id, {
+              siteId: options.site,
+              urlMapping: options.urlMapping,
+              redirect: options.redirect,
+              type: options.type,
+              documentId: options.documentId,
+              anchor: options.anchor,
+            })
+          );
+        }
+      )
+    );
+  redirects
+    .command('delete')
+    .description('Delete a Docs redirect')
+    .argument('<id>', 'Redirect ID')
+    .option('--yes', 'Confirm the deletion (required)')
+    .action(
+      withErrorHandling(async (id: string, options: { yes?: boolean }) => {
+        if (!options.yes) {
+          outputJson({ error: 'Refusing to delete without --yes' });
+          return;
+        }
+        await client.deleteDocsRedirect(id);
+        outputJson({ success: true, id, message: 'Redirect deleted' });
+      })
+    );
+  cmd.addCommand(redirects);
+
   return cmd;
 }

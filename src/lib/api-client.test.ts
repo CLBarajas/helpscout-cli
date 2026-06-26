@@ -355,6 +355,49 @@ describe('HelpScoutClient', () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({});
   });
 
+  it('lists Docs sites over the Docs API', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ sites: { page: 1, pages: 1, count: 1, items: [{ id: 's1', title: 'Help' }] } })
+    );
+
+    const res = await client.listDocsSites();
+
+    expect(res.sites.items[0].id).toBe('s1');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/sites');
+  });
+
+  it('uses the restrictions/restricted path asymmetry for site restrictions', async () => {
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ enabled: false }))
+      .mockResolvedValueOnce(
+        Response.json({ enabled: true, callbackConfiguration: { sharedSecret: 'sek' } })
+      );
+
+    await client.getDocsSiteRestrictions('s1');
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://docsapi.helpscout.net/v1/sites/s1/restrictions'
+    );
+    expect(fetchMock.mock.calls[0][1].method).toBe('GET');
+
+    const res = await client.updateDocsSiteRestrictions('s1', { enabled: true });
+    expect(fetchMock.mock.calls[1][0]).toBe('https://docsapi.helpscout.net/v1/sites/s1/restricted');
+    expect(fetchMock.mock.calls[1][1].method).toBe('PUT');
+    expect(res.callbackConfiguration?.sharedSecret).toBe('sek');
+  });
+
+  it('finds a redirect by url + siteId with the distinct redirectedUrl shape', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ redirectedUrl: { redirect: '/new', number: 42 } })
+    );
+
+    const res = await client.findDocsRedirect({ url: '/old', siteId: 's1' });
+
+    expect(res.redirectedUrl?.redirect).toBe('/new');
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://docsapi.helpscout.net/v1/redirects?url=%2Fold&siteId=s1'
+    );
+  });
+
   it('reads Docs collections over the Docs API with Basic auth on success', async () => {
     fetchMock.mockResolvedValueOnce(
       Response.json({

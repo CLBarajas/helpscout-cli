@@ -216,6 +216,92 @@ interface DocsArticleRevision extends DocsArticleRevisionRef {
   text?: string;
 }
 
+// Docs Sites. Lists wrap under `sites`, singletons under `site`.
+interface DocsSite {
+  id: string;
+  status?: string;
+  subDomain?: string;
+  cname?: string;
+  hasPublicSite?: boolean;
+  companyName?: string;
+  title?: string;
+  homeUrl?: string;
+  bgColor?: string;
+  description?: string;
+  hasContactForm?: boolean;
+  mailboxId?: number;
+  contactEmail?: string;
+  styleSheetUrl?: string;
+  headerCode?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// subDomain + title are required on create/update.
+interface DocsSiteInput {
+  subDomain: string;
+  title: string;
+  status?: string;
+  cname?: string;
+  hasPublicSite?: boolean;
+  logoUrl?: string;
+  logoWidth?: number;
+  logoHeight?: number;
+  favIconUrl?: string;
+  touchIconUrl?: string;
+  homeUrl?: string;
+  homeLinkText?: string;
+  bgColor?: string;
+  description?: string;
+  hasContactForm?: boolean;
+  mailboxId?: number;
+  contactEmail?: string;
+  styleSheetUrl?: string;
+  headerCode?: string;
+}
+
+// Restricted Docs: GET (/restrictions) and PUT (/restricted) bodies are BARE
+// JSON (no wrapper). The PUT response carries the JWT-signing sharedSecret.
+interface DocsSiteRestrictions {
+  enabled: boolean;
+  authentication?: string;
+  callbackConfiguration?: {
+    signInUrl?: string;
+    sharedSecret?: string;
+  };
+}
+
+// Docs Redirects. Lists wrap under `redirects`, singletons under `redirect`.
+interface DocsRedirect {
+  id: string;
+  siteId?: string;
+  urlMapping?: string;
+  documentId?: string;
+  type?: string;
+  redirect?: string;
+  anchor?: string;
+  createdAt?: string;
+  modifiedAt?: string;
+}
+
+interface DocsRedirectInput {
+  siteId: string;
+  urlMapping: string;
+  redirect: string;
+  type?: string;
+  documentId?: string;
+  anchor?: string;
+}
+
+// `find` returns a DISTINCT shape under `redirectedUrl` (null when no match).
+interface DocsRedirectedUrl {
+  type?: string;
+  redirect?: string;
+  slug?: string;
+  number?: number;
+  anchor?: string;
+}
+
 interface AuthProvider {
   getAccessToken(): Promise<string | null>;
   setAccessToken(token: string): Promise<boolean>;
@@ -2079,6 +2165,119 @@ export class HelpScoutClient {
       api: 'docs',
       body: count !== undefined ? { count } : {},
     });
+  }
+
+  // --- Docs API: sites ---
+
+  async listDocsSites(params: { page?: number } = {}): Promise<{ sites: DocsListResponse<DocsSite> }> {
+    return this.request<{ sites: DocsListResponse<DocsSite> }>('GET', '/sites', {
+      api: 'docs',
+      params,
+    });
+  }
+
+  async getDocsSite(siteId: string): Promise<{ site: DocsSite }> {
+    return this.request<{ site: DocsSite }>('GET', `/sites/${siteId}`, { api: 'docs' });
+  }
+
+  async createDocsSite(input: DocsSiteInput): Promise<{ site: DocsSite }> {
+    return this.request<{ site: DocsSite }>('POST', '/sites', {
+      api: 'docs',
+      body: input,
+      params: { reload: true },
+    });
+  }
+
+  // PUT /sites/{id} is a FULL REPLACE — omitted fields are cleared. Send the
+  // complete desired field set (GET first and merge). reload=true returns the
+  // updated site.
+  async updateDocsSite(siteId: string, input: DocsSiteInput): Promise<{ site: DocsSite }> {
+    return this.request<{ site: DocsSite }>('PUT', `/sites/${siteId}`, {
+      api: 'docs',
+      body: input,
+      params: { reload: true },
+    });
+  }
+
+  async deleteDocsSite(siteId: string): Promise<void> {
+    await this.request<void>('DELETE', `/sites/${siteId}`, { api: 'docs' });
+  }
+
+  // PATH ASYMMETRY: the read is /restrictions, the write (below) is /restricted.
+  async getDocsSiteRestrictions(siteId: string): Promise<DocsSiteRestrictions> {
+    return this.request<DocsSiteRestrictions>('GET', `/sites/${siteId}/restrictions`, {
+      api: 'docs',
+    });
+  }
+
+  // PATH ASYMMETRY: this PUT targets /restricted (the read uses /restrictions).
+  // The response carries callbackConfiguration.sharedSecret (the JWT signing
+  // secret) — return it as-is; never log it.
+  async updateDocsSiteRestrictions(
+    siteId: string,
+    input: DocsSiteRestrictions
+  ): Promise<DocsSiteRestrictions> {
+    return this.request<DocsSiteRestrictions>('PUT', `/sites/${siteId}/restricted`, {
+      api: 'docs',
+      body: input,
+    });
+  }
+
+  // --- Docs API: redirects ---
+
+  async listDocsRedirects(
+    siteId: string,
+    params: { page?: number } = {}
+  ): Promise<{ redirects: DocsListResponse<DocsRedirect> }> {
+    return this.request<{ redirects: DocsListResponse<DocsRedirect> }>(
+      'GET',
+      `/redirects/site/${siteId}`,
+      { api: 'docs', params }
+    );
+  }
+
+  async getDocsRedirect(redirectId: string): Promise<{ redirect: DocsRedirect }> {
+    return this.request<{ redirect: DocsRedirect }>('GET', `/redirects/${redirectId}`, {
+      api: 'docs',
+    });
+  }
+
+  // DISTINCT from list: resolves one URL against a site. Both url and siteId are
+  // required. Returns { redirectedUrl } (null when no redirect matches) — a
+  // different shape from the DocsRedirect object.
+  async findDocsRedirect(params: {
+    url: string;
+    siteId: string;
+  }): Promise<{ redirectedUrl: DocsRedirectedUrl | null }> {
+    return this.request<{ redirectedUrl: DocsRedirectedUrl | null }>('GET', '/redirects', {
+      api: 'docs',
+      params,
+    });
+  }
+
+  async createDocsRedirect(input: DocsRedirectInput): Promise<{ redirect: DocsRedirect }> {
+    return this.request<{ redirect: DocsRedirect }>('POST', '/redirects', {
+      api: 'docs',
+      body: input,
+      params: { reload: true },
+    });
+  }
+
+  // PUT /redirects/{id} is a FULL REPLACE — siteId, urlMapping, redirect must all
+  // be sent. reload=true returns the updated redirect.
+  async updateDocsRedirect(
+    redirectId: string,
+    input: DocsRedirectInput
+  ): Promise<{ redirect: DocsRedirect }> {
+    return this.request<{ redirect: DocsRedirect }>('PUT', `/redirects/${redirectId}`, {
+      api: 'docs',
+      body: input,
+      params: { reload: true },
+    });
+  }
+
+  async deleteDocsRedirect(redirectId: string): Promise<void> {
+    await this.request<void>('DELETE', `/redirects/${redirectId}`, { api: 'docs' });
   }
 }
 
