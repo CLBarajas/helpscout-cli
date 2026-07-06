@@ -15,6 +15,7 @@ import { createSavedRepliesCommand } from './commands/saved-replies.js';
 import { createReportsCommand } from './commands/reports.js';
 import { createRatingsCommand } from './commands/ratings.js';
 import { createWebhooksCommand } from './commands/webhooks.js';
+import { createDocsCommand } from './commands/docs.js';
 import { createMcpCommand } from './commands/mcp.js';
 
 declare const __VERSION__: string;
@@ -52,6 +53,7 @@ program.addCommand(createSavedRepliesCommand());
 program.addCommand(createReportsCommand());
 program.addCommand(createRatingsCommand());
 program.addCommand(createWebhooksCommand());
+program.addCommand(createDocsCommand());
 program.addCommand(createMcpCommand());
 
 program.parseAsync().catch(() => {

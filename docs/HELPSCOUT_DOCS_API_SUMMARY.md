@@ -272,7 +272,7 @@ Site
 2. **Slugs cannot be used to retrieve articles** - Use ID or number only
 3. **The "Uncategorized" category is automatic** - Cannot be manually assigned
 4. **Publishing deletes drafts** - No way to preserve draft after publish
-5. **No revision history via API** - Revisions endpoint returned 404 (may be deprecated or undocumented)
+5. **Revision history IS available** - `GET /articles/{id}/revisions` (list of refs) and `GET /revisions/{id}` (single revision with full text) both return 200. (An earlier note here claimed a 404 — that was stale.)
 
 ### URL and Slug Behavior
 

@@ -76,6 +76,13 @@ const API_ROOT = 'https://api.helpscout.net';
 const API_BASE = `${API_ROOT}/v2`;
 type ApiVersion = 'v2' | 'v3';
 
+// The Docs API is a SEPARATE Help Scout API: a different host, and HTTP Basic
+// auth (Docs API key as the username) instead of Mailbox OAuth. `api` selects
+// which one a request targets; it defaults to 'mailbox' so every existing call
+// is unchanged.
+const DOCS_API_BASE = 'https://docsapi.helpscout.net/v1';
+type ApiTarget = 'mailbox' | 'docs';
+
 // v3 endpoints (e.g. List Customers v3) use cursor pagination: the next page's
 // opaque cursor token is embedded in _links.next.href, with no page/totalPages.
 interface CursorPaginatedResponse<T> {
@@ -100,6 +107,201 @@ interface PaginatedResponse<T> {
   page: PageInfo;
 }
 
+// Docs API list responses wrap items under the resource's plural key, e.g.
+// { collections: { items, page, pages, count } } — distinct from the Mailbox
+// API's _embedded/page envelope.
+interface DocsListResponse<T> {
+  page: number;
+  pages: number;
+  count: number;
+  items: T[];
+}
+
+interface DocsCollection {
+  id: string;
+  number?: number;
+  slug?: string;
+  name: string;
+  visibility?: string;
+  articleCount?: number;
+  publishedArticleCount?: number;
+}
+
+interface DocsCategory {
+  id: string;
+  number?: number;
+  slug?: string;
+  name: string;
+  order?: number;
+  articleCount?: number;
+  publishedArticleCount?: number;
+  visibility?: string;
+}
+
+// Articles appear as lightweight refs in list/search/related results (no body
+// text); the single-article GET returns the full article including `text`.
+interface DocsArticleRef {
+  id: string;
+  number?: number;
+  collectionId?: string;
+  slug?: string;
+  status?: string;
+  hasDraft?: boolean;
+  name: string;
+  categories?: string[];
+  popularity?: number;
+  viewCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface DocsArticle extends DocsArticleRef {
+  text?: string;
+  keywords?: string[];
+  related?: string[];
+}
+
+// Write-body shapes. On article UPDATE, arrays support an explicit null to clear
+// (omitted = preserved, partial merge). Create/update reuse DocsArticle/
+// DocsCollection/DocsCategory as response types via ?reload=true.
+interface DocsArticleWriteBody {
+  collectionId?: string;
+  name?: string;
+  text?: string;
+  slug?: string;
+  status?: 'published' | 'notpublished';
+  categories?: string[] | null;
+  related?: string[] | null;
+  keywords?: string[] | null;
+}
+
+interface DocsCollectionInput {
+  siteId?: string;
+  name: string;
+  visibility?: string;
+  order?: number;
+  description?: string;
+}
+
+interface DocsCategoryInput {
+  collectionId?: string;
+  name: string;
+  slug?: string;
+  visibility?: string;
+  order?: number;
+  defaultSort?: string;
+}
+
+interface DocsCategoryOrderEntry {
+  id: string;
+  order: number;
+}
+
+interface DocsRevisionAuthor {
+  id: number;
+  firstName?: string;
+  lastName?: string;
+}
+
+// List revisions returns lightweight refs (no body text); the single-revision
+// GET (top-level /revisions/{id}) adds the full `text`.
+interface DocsArticleRevisionRef {
+  id: string;
+  articleId: string;
+  createdBy?: DocsRevisionAuthor;
+  createdAt?: string;
+}
+
+interface DocsArticleRevision extends DocsArticleRevisionRef {
+  text?: string;
+}
+
+// Docs Sites. Lists wrap under `sites`, singletons under `site`.
+interface DocsSite {
+  id: string;
+  status?: string;
+  subDomain?: string;
+  cname?: string;
+  hasPublicSite?: boolean;
+  companyName?: string;
+  title?: string;
+  homeUrl?: string;
+  bgColor?: string;
+  description?: string;
+  hasContactForm?: boolean;
+  mailboxId?: number;
+  contactEmail?: string;
+  styleSheetUrl?: string;
+  headerCode?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+// subDomain + title are required on create/update.
+interface DocsSiteInput {
+  subDomain: string;
+  title: string;
+  status?: string;
+  cname?: string;
+  hasPublicSite?: boolean;
+  logoUrl?: string;
+  logoWidth?: number;
+  logoHeight?: number;
+  favIconUrl?: string;
+  touchIconUrl?: string;
+  homeUrl?: string;
+  homeLinkText?: string;
+  bgColor?: string;
+  description?: string;
+  hasContactForm?: boolean;
+  mailboxId?: number;
+  contactEmail?: string;
+  styleSheetUrl?: string;
+  headerCode?: string;
+}
+
+// Restricted Docs: GET (/restrictions) and PUT (/restricted) bodies are BARE
+// JSON (no wrapper). The PUT response carries the JWT-signing sharedSecret.
+interface DocsSiteRestrictions {
+  enabled: boolean;
+  authentication?: string;
+  callbackConfiguration?: {
+    signInUrl?: string;
+    sharedSecret?: string;
+  };
+}
+
+// Docs Redirects. Lists wrap under `redirects`, singletons under `redirect`.
+interface DocsRedirect {
+  id: string;
+  siteId?: string;
+  urlMapping?: string;
+  documentId?: string;
+  type?: string;
+  redirect?: string;
+  anchor?: string;
+  createdAt?: string;
+  modifiedAt?: string;
+}
+
+interface DocsRedirectInput {
+  siteId: string;
+  urlMapping: string;
+  redirect: string;
+  type?: string;
+  documentId?: string;
+  anchor?: string;
+}
+
+// `find` returns a DISTINCT shape under `redirectedUrl` (null when no match).
+interface DocsRedirectedUrl {
+  type?: string;
+  redirect?: string;
+  slug?: string;
+  number?: number;
+  anchor?: string;
+}
+
 interface AuthProvider {
   getAccessToken(): Promise<string | null>;
   setAccessToken(token: string): Promise<boolean>;
@@ -107,6 +309,7 @@ interface AuthProvider {
   setRefreshToken(token: string): Promise<boolean>;
   getAppId(): Promise<string | null>;
   getAppSecret(): Promise<string | null>;
+  getDocsApiKey(): Promise<string | null>;
 }
 
 export class HelpScoutClient {
@@ -209,6 +412,7 @@ export class HelpScoutClient {
       body?: unknown;
       retry?: boolean;
       rateLimitRetry?: boolean;
+      api?: ApiTarget;
       version?: ApiVersion;
       accept?: string;
       redirect?: 'follow' | 'error' | 'manual';
@@ -219,12 +423,14 @@ export class HelpScoutClient {
       body,
       retry = true,
       rateLimitRetry = true,
+      api = 'mailbox',
       version = 'v2',
       accept,
       redirect,
     } = options;
 
-    const base = version === 'v3' ? `${API_ROOT}/v3` : API_BASE;
+    const base =
+      api === 'docs' ? DOCS_API_BASE : version === 'v3' ? `${API_ROOT}/v3` : API_BASE;
     const url = new URL(`${base}${path}`);
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
@@ -234,11 +440,26 @@ export class HelpScoutClient {
       });
     }
 
-    const token = await this.getAccessToken();
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     };
+    if (api === 'docs') {
+      // Docs API: HTTP Basic auth with the API key as the username (Help Scout
+      // ignores the password). The key does not expire, so there is no token
+      // cache and no refresh — this deliberately bypasses the Mailbox OAuth path
+      // and never reads or writes the shared `this.accessToken`.
+      const docsApiKey = await this.authManager.getDocsApiKey();
+      if (!docsApiKey) {
+        throw new HelpScoutCliError(
+          'Docs API key not configured. Set it in the keychain (helpscout-cli/docs-api-key) or via the HELPSCOUT_DOCS_API_KEY environment variable.',
+          401
+        );
+      }
+      headers.Authorization = `Basic ${Buffer.from(`${docsApiKey}:X`).toString('base64')}`;
+    } else {
+      const token = await this.getAccessToken();
+      headers.Authorization = `Bearer ${token}`;
+    }
     if (accept) {
       headers.Accept = accept;
     }
@@ -258,7 +479,9 @@ export class HelpScoutClient {
       throw new HelpScoutCliError(`Network request failed: ${message}`, 0);
     }
 
-    if (response.status === 401 && retry) {
+    // OAuth refresh-and-retry is Mailbox-only. A Docs 401 means a bad/expired
+    // Docs key, so never null or re-mint the shared Mailbox token over it.
+    if (response.status === 401 && retry && api !== 'docs') {
       this.accessToken = null;
       await this.refreshAccessToken();
       return this.rawRequest(method, path, { ...options, retry: false });
@@ -296,6 +519,7 @@ export class HelpScoutClient {
       body?: unknown;
       retry?: boolean;
       rateLimitRetry?: boolean;
+      api?: ApiTarget;
       version?: ApiVersion;
     } = {}
   ): Promise<T> {
@@ -1607,6 +1831,453 @@ export class HelpScoutClient {
   }
   async getPhoneReport(params: ChannelReportParams) {
     return this.getReport<PhoneReport>('/reports/phone', params);
+  }
+
+  // --- Docs API (docsapi.helpscout.net/v1) ---
+  // First read primitive against the separate Docs API. The sync/write *policy*
+  // (collision detection, content-hash idempotency, reconcile) deliberately
+  // stays in the Python bridge tooling (kb_docs_sync.py); the CLI owns the
+  // transport. Docs writes, when added, route through rawRequest directly (like
+  // createDraftConversation) and read the Location header — never through the
+  // Mailbox-only requestForCreation funnel.
+  async listDocsCollections(
+    params: { page?: number; siteId?: string; visibility?: string } = {}
+  ): Promise<{ collections: DocsListResponse<DocsCollection> }> {
+    return this.request<{ collections: DocsListResponse<DocsCollection> }>(
+      'GET',
+      '/collections',
+      { api: 'docs', params }
+    );
+  }
+
+  async getDocsCollection(collectionId: string): Promise<{ collection: DocsCollection }> {
+    return this.request<{ collection: DocsCollection }>('GET', `/collections/${collectionId}`, {
+      api: 'docs',
+    });
+  }
+
+  async listDocsCategories(
+    collectionId: string,
+    params: { page?: number; sort?: string; order?: string } = {}
+  ): Promise<{ categories: DocsListResponse<DocsCategory> }> {
+    return this.request<{ categories: DocsListResponse<DocsCategory> }>(
+      'GET',
+      `/collections/${collectionId}/categories`,
+      { api: 'docs', params }
+    );
+  }
+
+  // Articles can be listed by collection OR by category (the Docs API exposes
+  // both paths); pass exactly one. Returns lightweight refs without body text.
+  async listDocsArticles(
+    params: {
+      collectionId?: string;
+      categoryId?: string;
+      status?: string;
+      sort?: string;
+      order?: string;
+      page?: number;
+      pageSize?: number;
+    } = {}
+  ): Promise<{ articles: DocsListResponse<DocsArticleRef> }> {
+    const { collectionId, categoryId, ...query } = params;
+    if (!collectionId && !categoryId) {
+      throw new HelpScoutCliError('listDocsArticles requires collectionId or categoryId', 400);
+    }
+    const path = categoryId
+      ? `/categories/${categoryId}/articles`
+      : `/collections/${collectionId}/articles`;
+    return this.request<{ articles: DocsListResponse<DocsArticleRef> }>('GET', path, {
+      api: 'docs',
+      params: query,
+    });
+  }
+
+  async getDocsArticle(
+    articleIdOrNumber: string,
+    params: { draft?: boolean } = {}
+  ): Promise<{ article: DocsArticle }> {
+    return this.request<{ article: DocsArticle }>('GET', `/articles/${articleIdOrNumber}`, {
+      api: 'docs',
+      params,
+    });
+  }
+
+  async searchDocsArticles(params: {
+    query: string;
+    page?: number;
+    collectionId?: string;
+    siteId?: string;
+    status?: string;
+    visibility?: string;
+  }): Promise<{ articles: DocsListResponse<DocsArticleRef> }> {
+    return this.request<{ articles: DocsListResponse<DocsArticleRef> }>('GET', '/search/articles', {
+      api: 'docs',
+      params,
+    });
+  }
+
+  async listRelatedDocsArticles(
+    articleId: string,
+    params: { page?: number } = {}
+  ): Promise<{ articles: DocsListResponse<DocsArticleRef> }> {
+    return this.request<{ articles: DocsListResponse<DocsArticleRef> }>(
+      'GET',
+      `/articles/${articleId}/related`,
+      { api: 'docs', params }
+    );
+  }
+
+  /** Walk every page of a Docs list endpoint and return the flattened items. */
+  private async fetchAllDocsPages<T>(
+    fetchPage: (page: number) => Promise<DocsListResponse<T>>
+  ): Promise<T[]> {
+    const items: T[] = [];
+    let page = 1;
+    let pages = 1;
+    do {
+      const result = await fetchPage(page);
+      items.push(...result.items);
+      pages = result.pages || 1;
+      page += 1;
+    } while (page <= pages);
+    return items;
+  }
+
+  // Discovery aid: the full collection -> category hierarchy in one call (every
+  // page walked). Scope to one collection with collectionId, which accepts the
+  // id OR the short number — it resolves the collection first, then uses its
+  // real id for the nested category lookup (the API restricts that path to
+  // 24-char ids, so the number wouldn't work there directly).
+  async getDocsTree(
+    options: { collectionId?: string; siteId?: string; visibility?: string } = {}
+  ): Promise<{ collections: Array<DocsCollection & { categories: DocsCategory[] }> }> {
+    let collections: DocsCollection[];
+    if (options.collectionId) {
+      const { collection } = await this.getDocsCollection(options.collectionId);
+      collections = [collection];
+    } else {
+      collections = await this.fetchAllDocsPages((page) =>
+        this.listDocsCollections({
+          siteId: options.siteId,
+          visibility: options.visibility,
+          page,
+        }).then((r) => r.collections)
+      );
+    }
+
+    const withCategories = await Promise.all(
+      collections.map(async (collection) => ({
+        ...collection,
+        categories: await this.fetchAllDocsPages((page) =>
+          this.listDocsCategories(collection.id, { page }).then((r) => r.categories)
+        ),
+      }))
+    );
+
+    return { collections: withCategories };
+  }
+
+  // List a Docs article's revision history (lightweight refs, no body text — use
+  // getDocsArticleRevision for a revision's full text).
+  async listDocsArticleRevisions(
+    articleId: string,
+    params: { page?: number } = {}
+  ): Promise<{ revisions: DocsListResponse<DocsArticleRevisionRef> }> {
+    return this.request<{ revisions: DocsListResponse<DocsArticleRevisionRef> }>(
+      'GET',
+      `/articles/${articleId}/revisions`,
+      { api: 'docs', params }
+    );
+  }
+
+  // Get one revision INCLUDING its full body text. The path is top-level
+  // (/revisions/{id}), NOT nested under /articles — revision ids are globally
+  // addressable.
+  async getDocsArticleRevision(revisionId: string): Promise<{ revision: DocsArticleRevision }> {
+    return this.request<{ revision: DocsArticleRevision }>('GET', `/revisions/${revisionId}`, {
+      api: 'docs',
+    });
+  }
+
+  // --- Docs API writes ---
+  // Creates POST with params:{reload:true} so the API returns the created object
+  // in the body (the proven Docs idiom; requestForCreation is Mailbox-only and
+  // reads a nonexistent Resource-ID header). Publishing is always explicit —
+  // articles default to 'notpublished'.
+
+  async createDocsArticle(body: {
+    collectionId: string;
+    name: string;
+    text: string;
+    slug?: string;
+    status?: 'published' | 'notpublished';
+    categories?: string[];
+    related?: string[];
+    keywords?: string[];
+  }): Promise<{ article: DocsArticle }> {
+    const payload: DocsArticleWriteBody = { status: 'notpublished', ...body };
+    return this.request<{ article: DocsArticle }>('POST', '/articles', {
+      api: 'docs',
+      body: payload,
+      params: { reload: true },
+    });
+  }
+
+  // PUT /articles/{id} is a PARTIAL MERGE: omitted fields are preserved; an array
+  // sent as null clears it. Send only the keys the caller provided. collectionId
+  // is not updatable here.
+  async updateDocsArticle(
+    articleId: string,
+    body: {
+      name?: string;
+      text?: string;
+      slug?: string;
+      status?: 'published' | 'notpublished';
+      categories?: string[] | null;
+      related?: string[] | null;
+      keywords?: string[] | null;
+    }
+  ): Promise<{ article: DocsArticle }> {
+    return this.request<{ article: DocsArticle }>('PUT', `/articles/${articleId}`, {
+      api: 'docs',
+      body,
+      params: { reload: true },
+    });
+  }
+
+  async deleteDocsArticle(articleId: string): Promise<void> {
+    await this.request<void>('DELETE', `/articles/${articleId}`, { api: 'docs' });
+  }
+
+  // PUT /articles/{id}/drafts — create/update the draft without touching the
+  // published version. NOTE: publishing the article later discards the draft.
+  async saveDocsArticleDraft(articleId: string, text: string): Promise<void> {
+    await this.request<void>('PUT', `/articles/${articleId}/drafts`, {
+      api: 'docs',
+      body: { text },
+    });
+  }
+
+  async deleteDocsArticleDraft(articleId: string): Promise<void> {
+    await this.request<void>('DELETE', `/articles/${articleId}/drafts`, { api: 'docs' });
+  }
+
+  async createDocsCollection(data: DocsCollectionInput): Promise<{ collection: DocsCollection }> {
+    return this.request<{ collection: DocsCollection }>('POST', '/collections', {
+      api: 'docs',
+      body: data,
+      params: { reload: true },
+    });
+  }
+
+  // PUT /collections/{id}. The API requires `name` on every PUT but merges: omitted
+  // fields are preserved (verified live 2026-07-06 — visibility/description survived a
+  // name-only PUT). Send only provided fields plus the current name (read if omitted).
+  async updateDocsCollection(
+    collectionId: string,
+    data: Partial<DocsCollectionInput>
+  ): Promise<{ collection: DocsCollection }> {
+    let name = data.name;
+    if (!name) {
+      const { collection } = await this.getDocsCollection(collectionId);
+      name = collection.name;
+    }
+    const body: DocsCollectionInput = { name };
+    if (data.visibility !== undefined) body.visibility = data.visibility;
+    if (data.order !== undefined) body.order = data.order;
+    if (data.description !== undefined) body.description = data.description;
+    if (data.siteId !== undefined) body.siteId = data.siteId;
+    return this.request<{ collection: DocsCollection }>('PUT', `/collections/${collectionId}`, {
+      api: 'docs',
+      body,
+      params: { reload: true },
+    });
+  }
+
+  async deleteDocsCollection(collectionId: string): Promise<void> {
+    await this.request<void>('DELETE', `/collections/${collectionId}`, { api: 'docs' });
+  }
+
+  async createDocsCategory(data: DocsCategoryInput): Promise<{ category: DocsCategory }> {
+    return this.request<{ category: DocsCategory }>('POST', '/categories', {
+      api: 'docs',
+      body: data,
+      params: { reload: true },
+    });
+  }
+
+  // PUT /categories/{id}. Requires `name` but merges: omitted fields are preserved
+  // (verified live 2026-07-06 — visibility/defaultSort survived a name-only PUT).
+  // Send only provided fields plus the current name (resolved via the collection's
+  // category list, since there is no single-category GET). collectionId is needed
+  // only for that name resolution.
+  async updateDocsCategory(
+    categoryId: string,
+    collectionId: string,
+    data: Partial<Omit<DocsCategoryInput, 'collectionId'>>
+  ): Promise<{ category: DocsCategory }> {
+    let name = data.name;
+    if (!name) {
+      const { categories } = await this.listDocsCategories(collectionId);
+      const current = categories.items.find((c) => c.id === categoryId);
+      if (!current) {
+        throw new HelpScoutCliError(
+          `Category ${categoryId} not found in collection ${collectionId}`,
+          404
+        );
+      }
+      name = current.name;
+    }
+    const body: Omit<DocsCategoryInput, 'collectionId'> = { name };
+    if (data.slug !== undefined) body.slug = data.slug;
+    if (data.visibility !== undefined) body.visibility = data.visibility;
+    if (data.order !== undefined) body.order = data.order;
+    if (data.defaultSort !== undefined) body.defaultSort = data.defaultSort;
+    return this.request<{ category: DocsCategory }>('PUT', `/categories/${categoryId}`, {
+      api: 'docs',
+      body,
+      params: { reload: true },
+    });
+  }
+
+  async deleteDocsCategory(categoryId: string): Promise<void> {
+    await this.request<void>('DELETE', `/categories/${categoryId}`, { api: 'docs' });
+  }
+
+  // PUT /collections/{id}/categories — REORDER. Shares its path with the list GET;
+  // only the verb + body differ. Body is { categories: [{ id, order }] }.
+  async reorderDocsCategories(
+    collectionId: string,
+    categories: DocsCategoryOrderEntry[]
+  ): Promise<void> {
+    await this.request<void>('PUT', `/collections/${collectionId}/categories`, {
+      api: 'docs',
+      body: { categories },
+    });
+  }
+
+  // Increment an article's view count (factors into popularity). Only send
+  // `count` when provided so the server default of 1 applies otherwise. Returns
+  // no body.
+  async incrementDocsArticleViews(articleId: string, count?: number): Promise<void> {
+    await this.request<void>('PUT', `/articles/${articleId}/views`, {
+      api: 'docs',
+      body: count !== undefined ? { count } : {},
+    });
+  }
+
+  // --- Docs API: sites ---
+
+  async listDocsSites(params: { page?: number } = {}): Promise<{ sites: DocsListResponse<DocsSite> }> {
+    return this.request<{ sites: DocsListResponse<DocsSite> }>('GET', '/sites', {
+      api: 'docs',
+      params,
+    });
+  }
+
+  async getDocsSite(siteId: string): Promise<{ site: DocsSite }> {
+    return this.request<{ site: DocsSite }>('GET', `/sites/${siteId}`, { api: 'docs' });
+  }
+
+  async createDocsSite(input: DocsSiteInput): Promise<{ site: DocsSite }> {
+    return this.request<{ site: DocsSite }>('POST', '/sites', {
+      api: 'docs',
+      body: input,
+      params: { reload: true },
+    });
+  }
+
+  // PUT /sites/{id} is a FULL REPLACE — omitted fields are cleared. Send the
+  // complete desired field set (GET first and merge). reload=true returns the
+  // updated site.
+  async updateDocsSite(siteId: string, input: DocsSiteInput): Promise<{ site: DocsSite }> {
+    return this.request<{ site: DocsSite }>('PUT', `/sites/${siteId}`, {
+      api: 'docs',
+      body: input,
+      params: { reload: true },
+    });
+  }
+
+  async deleteDocsSite(siteId: string): Promise<void> {
+    await this.request<void>('DELETE', `/sites/${siteId}`, { api: 'docs' });
+  }
+
+  // PATH ASYMMETRY: the read is /restrictions, the write (below) is /restricted.
+  async getDocsSiteRestrictions(siteId: string): Promise<DocsSiteRestrictions> {
+    return this.request<DocsSiteRestrictions>('GET', `/sites/${siteId}/restrictions`, {
+      api: 'docs',
+    });
+  }
+
+  // PATH ASYMMETRY: this PUT targets /restricted (the read uses /restrictions).
+  // The response carries callbackConfiguration.sharedSecret (the JWT signing
+  // secret) — return it as-is; never log it.
+  async updateDocsSiteRestrictions(
+    siteId: string,
+    input: DocsSiteRestrictions
+  ): Promise<DocsSiteRestrictions> {
+    return this.request<DocsSiteRestrictions>('PUT', `/sites/${siteId}/restricted`, {
+      api: 'docs',
+      body: input,
+    });
+  }
+
+  // --- Docs API: redirects ---
+
+  async listDocsRedirects(
+    siteId: string,
+    params: { page?: number } = {}
+  ): Promise<{ redirects: DocsListResponse<DocsRedirect> }> {
+    return this.request<{ redirects: DocsListResponse<DocsRedirect> }>(
+      'GET',
+      `/redirects/site/${siteId}`,
+      { api: 'docs', params }
+    );
+  }
+
+  async getDocsRedirect(redirectId: string): Promise<{ redirect: DocsRedirect }> {
+    return this.request<{ redirect: DocsRedirect }>('GET', `/redirects/${redirectId}`, {
+      api: 'docs',
+    });
+  }
+
+  // DISTINCT from list: resolves one URL against a site. Both url and siteId are
+  // required. Returns { redirectedUrl } (null when no redirect matches) — a
+  // different shape from the DocsRedirect object.
+  async findDocsRedirect(params: {
+    url: string;
+    siteId: string;
+  }): Promise<{ redirectedUrl: DocsRedirectedUrl | null }> {
+    return this.request<{ redirectedUrl: DocsRedirectedUrl | null }>('GET', '/redirects', {
+      api: 'docs',
+      params,
+    });
+  }
+
+  async createDocsRedirect(input: DocsRedirectInput): Promise<{ redirect: DocsRedirect }> {
+    return this.request<{ redirect: DocsRedirect }>('POST', '/redirects', {
+      api: 'docs',
+      body: input,
+      params: { reload: true },
+    });
+  }
+
+  // PUT /redirects/{id} is a FULL REPLACE — siteId, urlMapping, redirect must all
+  // be sent. reload=true returns the updated redirect.
+  async updateDocsRedirect(
+    redirectId: string,
+    input: DocsRedirectInput
+  ): Promise<{ redirect: DocsRedirect }> {
+    return this.request<{ redirect: DocsRedirect }>('PUT', `/redirects/${redirectId}`, {
+      api: 'docs',
+      body: input,
+      params: { reload: true },
+    });
+  }
+
+  async deleteDocsRedirect(redirectId: string): Promise<void> {
+    await this.request<void>('DELETE', `/redirects/${redirectId}`, { api: 'docs' });
   }
 }
 

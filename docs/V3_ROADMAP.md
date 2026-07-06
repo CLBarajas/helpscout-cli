@@ -90,8 +90,10 @@ structured content on the migrated + new MCP tools (handlers return `jsonRespons
 - **Organizations API** — no Rogue Amoeba use case identified yet; B2C-shaped support load.
 - **User-status endpoints** — speculative rotation/coverage tooling; revisit if the support-schedule
   workflows ever want live presence data.
-- **Docs API surface** (`docs/HELPSCOUT_DOCS_API_SUMMARY.md`, Jan 2026 research) — separate product
-  (KB sync); big ticket; belongs to website/KB tooling discussions, not the CLI wave.
+- ~~**Docs API surface**~~ — **SHIPPED 2026-06-26** on branch `docs-api-foundation` (full read +
+  write + discovery `tree`; 36 paired MCP tools). See `API_COVERAGE.md` (Docs section) +
+  `DOCS_API_TESTING.md`. Remaining: `assets` multipart upload (intentionally deferred) and the
+  live write verification pass.
 - **Independent-identity rename** (`FORK_IMPLEMENTATION_PLAN.md` § Versioning Strategy, Mar 2026) —
   premise ("diverged too far to track upstream") no longer holds after the 6/10+6/12 reconvergence.
   Stay on upstream's version numbers; revisit only if upstream goes quiet again.

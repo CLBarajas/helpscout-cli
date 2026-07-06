@@ -1,9 +1,12 @@
-# Mailbox API — CLI Coverage Matrix
+# Help Scout CLI Coverage Matrix
 
-**Goal:** full Help Scout Mailbox API (Inbox API 2.0) coverage via the `helpscout` CLI.
-**Last updated:** 2026-06-15. Endpoint groups verified against developer.helpscout.com.
+**Goal:** full Help Scout **Mailbox API** (Inbox API 2.0) **and Docs API** coverage via the `helpscout` CLI.
+**Last updated:** 2026-06-26. Endpoint groups verified against developer.helpscout.com.
 
 Legend: ✅ covered · ◑ partial · ⬜ not yet · ⏸ parked (intentional)
+
+> The Mailbox API (OAuth, `api.helpscout.net/v2`) is below; the **Docs API** (separate
+> key, `docsapi.helpscout.net/v1`) has its own section near the end.
 
 ## Conversations
 - ✅ list, view (+`--v3`), create, update, delete
@@ -47,7 +50,8 @@ Legend: ✅ covered · ◑ partial · ⬜ not yet · ⏸ parked (intentional)
   drilldown); Conversations (overall, volumes-by-channel, busiest, drilldown,
   fields-drilldown, new-conversations, new-conversations-drilldown, received-messages);
   Productivity (overall, first-response-time, replies-sent, resolution-time, resolved,
-  response-time); Happiness (overall, ratings); Docs (overall — needs a Docs plan);
+  response-time); Happiness (overall, ratings); Docs (overall report — the Mailbox
+  `/reports/docs` analytics, distinct from the Docs API covered below);
   User/Team (overall, conversation-history, customers-helped, drilldown, happiness,
   happiness-ratings, replies, resolutions, chat); Channel (chat, email, phone).
 
@@ -67,6 +71,55 @@ Full CLI coverage of the Mailbox API is now in place except:
 Both are good candidates for an upstream "gauge interest" issue (Stephen builds from
 issues) rather than fork work — see `UPSTREAM_ISSUES_PLAN.md`.
 
+---
+
+# Docs API — CLI Coverage (knowledge base)
+
+Separate API: `docsapi.helpscout.net/v1`, HTTP Basic auth with a Docs API key (keychain
+`helpscout-cli/docs-api-key` or `HELPSCOUT_DOCS_API_KEY`), distinct from Mailbox OAuth.
+Commands under `helpscout docs …`; 36 paired MCP tools (16 read, 20 write). Fork-only —
+upstream has no Docs support.
+
+## Collections
+- ✅ list, view (id-or-number), create, update (merge), delete
+
+## Categories
+- ✅ list (by collection), create, update (merge), delete, reorder
+
+## Articles
+- ✅ list (by collection or category), view (id-or-number, `--draft`), search, related
+- ✅ create (defaults `notpublished`), update (partial merge), delete
+- ✅ drafts: save-draft, delete-draft · increment-views
+- ✅ revisions: list, view (single revision with full text — top-level `/revisions/{id}`)
+
+## Tree (discovery)
+- ✅ tree [collection] — full collection → category hierarchy in one call (accepts id or
+  number; resolves number → id for the nested category lookup)
+
+## Sites
+- ✅ list, view, create, update (full replace), delete
+- ✅ restrictions (read `/restrictions`) · set-restrictions (write `/restricted` — note the
+  path asymmetry)
+
+## Redirects
+- ✅ list (by site), view, find (by url+siteId — distinct `{redirectedUrl}` shape), create,
+  update (full replace), delete
+
+## Assets
+- ⬜ upload (article image / settings logo·favicon·touchicon) — needs `multipart/form-data`;
+  Shadow Docs keeps images as absolute rogueamoeba.com URLs, so intentionally deferred.
+
+## Docs notes
+- Writes use `?reload=true` to return the created/updated object (never the Mailbox-only
+  `requestForCreation`, which reads a `Resource-ID` header the Docs API doesn't send).
+- **Publish posture:** article create defaults to `notpublished`; publishing is explicit
+  (`--publish` / `status:published`). Publishing discards the draft.
+- **Write surface verified live 2026-07-06** (see `DOCS_API_TESTING.md`): article
+  create/update/draft/delete round-trip; collection and category PUT are **merge**
+  (omitted fields preserved); redirect create accepts the optional fields (the API
+  normalizes `type` — sent `custom-url`, stored `custom`). Only `assets` remains
+  unimplemented — intentional.
+
 ## Notes
 - All new client methods are covered by `src/lib/api-client.test.ts` (mock-fetch:
   asserts paths, versions, `_embedded` keys, request bodies).
@@ -74,8 +127,8 @@ issues) rather than fork work — see `UPSTREAM_ISSUES_PLAN.md`.
   webhooks, system-users, customer sub-resources + extras, mailbox folders/routing,
   threads (create/source/schedule), users create/delete, ratings, and the 26 expanded
   reports. All use the registerTool idiom with read-only/mutating/destructive annotations;
-  the registry-parity test guards `search_tools` discovery. MCP server now serves **132
-  tools** (up from 62). Not exposed via MCP: streaming attachment download (base64
+  the registry-parity test guards `search_tools` discovery. MCP server now serves **168
+  tools** (132 Mailbox + 36 Docs). Not exposed via MCP: streaming attachment download (base64
   `get_attachment_data` already serves MCP transport).
 - v3 endpoints (Get Conversation, List Threads, List Customers, System Users) route via
   the version-aware `request()` (`version: 'v3'`).

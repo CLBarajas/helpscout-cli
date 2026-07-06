@@ -38,6 +38,7 @@ describe('HelpScoutClient', () => {
       getRefreshToken: vi.fn().mockResolvedValue(null),
       setAccessToken: vi.fn().mockResolvedValue(true),
       setRefreshToken: vi.fn().mockResolvedValue(true),
+      getDocsApiKey: vi.fn().mockResolvedValue('docs-key'),
     });
   });
 
@@ -157,6 +158,267 @@ describe('HelpScoutClient', () => {
     fetchMock.mockResolvedValueOnce(Response.json({ error: 'not found' }, { status: 404 }));
 
     await expect(client.downloadAttachment(123, 456)).rejects.toMatchObject({ statusCode: 404 });
+  });
+
+  // --- Mailbox vs Docs auth boundary (characterization) ---
+  // These two pin the single highest-risk behavior of the two-API client: a
+  // Mailbox 401 must refresh and retry; a Docs 401 must NOT touch the shared
+  // OAuth token. Without these, the Docs branch could regress Mailbox auth
+  // silently (the 401-refresh path had no coverage before).
+
+  it('refreshes the OAuth token and retries once on a Mailbox 401', async () => {
+    const setAccessToken = vi.fn().mockResolvedValue(true);
+    client = new HelpScoutClient({
+      getAccessToken: vi.fn().mockResolvedValue('stale-token'),
+      getAppId: vi.fn().mockResolvedValue('app-id'),
+      getAppSecret: vi.fn().mockResolvedValue('app-secret'),
+      getRefreshToken: vi.fn().mockResolvedValue(null),
+      setAccessToken,
+      setRefreshToken: vi.fn().mockResolvedValue(true),
+      getDocsApiKey: vi.fn().mockResolvedValue('docs-key'),
+    });
+
+    fetchMock
+      // 1) initial Mailbox call → 401
+      .mockResolvedValueOnce(Response.json({ error: 'unauthorized' }, { status: 401 }))
+      // 2) client_credentials token refresh → fresh token
+      .mockResolvedValueOnce(
+        Response.json({ access_token: 'fresh-token', token_type: 'bearer', expires_in: 3600 })
+      )
+      // 3) retried Mailbox call → 200
+      .mockResolvedValueOnce(Response.json({ id: 123 }));
+
+    const conversation = await client.getConversation(123);
+
+    expect(conversation).toMatchObject({ id: 123 });
+    // The 401 minted and persisted a new OAuth token via the token endpoint...
+    expect(setAccessToken).toHaveBeenCalledWith('fresh-token');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[1][0]).toBe('https://api.helpscout.net/v2/oauth2/token');
+    // ...the first attempt used the stale token, the retry the refreshed one.
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>).Authorization).toBe(
+      'Bearer stale-token'
+    );
+    expect((fetchMock.mock.calls[2][1].headers as Record<string, string>).Authorization).toBe(
+      'Bearer fresh-token'
+    );
+  });
+
+  it('does not refresh OAuth or touch the Mailbox token on a Docs 401', async () => {
+    const setAccessToken = vi.fn().mockResolvedValue(true);
+    client = new HelpScoutClient({
+      getAccessToken: vi.fn().mockResolvedValue('test-token'),
+      getAppId: vi.fn().mockResolvedValue('app-id'),
+      getAppSecret: vi.fn().mockResolvedValue('app-secret'),
+      getRefreshToken: vi.fn().mockResolvedValue(null),
+      setAccessToken,
+      setRefreshToken: vi.fn().mockResolvedValue(true),
+      getDocsApiKey: vi.fn().mockResolvedValue('docs-key'),
+    });
+
+    fetchMock.mockResolvedValueOnce(Response.json({ error: 'invalid key' }, { status: 401 }));
+
+    await expect(client.listDocsCollections()).rejects.toMatchObject({ statusCode: 401 });
+
+    // A single fetch: no token-refresh hop, no retry.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    // The shared Mailbox OAuth token is never re-minted over a Docs failure.
+    expect(setAccessToken).not.toHaveBeenCalled();
+    // It hit the Docs host with Basic auth (key as username, ":X").
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/collections');
+    const expectedAuth = `Basic ${Buffer.from('docs-key:X').toString('base64')}`;
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>).Authorization).toBe(
+      expectedAuth
+    );
+  });
+
+  it('builds a Docs tree, walking every category page per collection', async () => {
+    fetchMock
+      // collections list (single page)
+      .mockResolvedValueOnce(
+        Response.json({
+          collections: { page: 1, pages: 1, count: 1, items: [{ id: 'col1', name: 'Shadow KB' }] },
+        })
+      )
+      // col1 categories — page 1 of 2
+      .mockResolvedValueOnce(
+        Response.json({
+          categories: { page: 1, pages: 2, count: 2, items: [{ id: 'cat1', name: 'Mac' }] },
+        })
+      )
+      // col1 categories — page 2 of 2
+      .mockResolvedValueOnce(
+        Response.json({
+          categories: { page: 2, pages: 2, count: 2, items: [{ id: 'cat2', name: 'Windows' }] },
+        })
+      );
+
+    const tree = await client.getDocsTree();
+
+    expect(tree.collections).toHaveLength(1);
+    expect(tree.collections[0].id).toBe('col1');
+    expect(tree.collections[0].categories.map((c) => c.id)).toEqual(['cat1', 'cat2']);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/collections?page=1');
+    expect(fetchMock.mock.calls[1][0]).toBe(
+      'https://docsapi.helpscout.net/v1/collections/col1/categories?page=1'
+    );
+    expect(fetchMock.mock.calls[2][0]).toBe(
+      'https://docsapi.helpscout.net/v1/collections/col1/categories?page=2'
+    );
+  });
+
+  it('creates a Docs article defaulting to notpublished, returning the created article', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ article: { id: 'a1', name: 'Hi', status: 'notpublished' } })
+    );
+
+    const res = await client.createDocsArticle({ collectionId: 'c1', name: 'Hi', text: '<p>hi</p>' });
+
+    expect(res.article.id).toBe('a1');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/articles?reload=true');
+    const init = fetchMock.mock.calls[0][1];
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      collectionId: 'c1',
+      name: 'Hi',
+      text: '<p>hi</p>',
+      status: 'notpublished',
+    });
+  });
+
+  it('updates a Docs article with only the provided fields (partial merge)', async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ article: { id: 'a1', name: 'New' } }));
+
+    await client.updateDocsArticle('a1', { name: 'New' });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://docsapi.helpscout.net/v1/articles/a1?reload=true'
+    );
+    const init = fetchMock.mock.calls[0][1];
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body as string)).toEqual({ name: 'New' });
+  });
+
+  it('deletes a Docs article with a DELETE to the article path', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await client.deleteDocsArticle('a1');
+
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/articles/a1');
+    expect(fetchMock.mock.calls[0][1].method).toBe('DELETE');
+  });
+
+  it('reorders Docs categories with a { categories: [{id,order}] } body', async () => {
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await client.reorderDocsCategories('c1', [
+      { id: 'x', order: 1 },
+      { id: 'y', order: 2 },
+    ]);
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://docsapi.helpscout.net/v1/collections/c1/categories'
+    );
+    const init = fetchMock.mock.calls[0][1];
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body as string)).toEqual({
+      categories: [
+        { id: 'x', order: 1 },
+        { id: 'y', order: 2 },
+      ],
+    });
+  });
+
+  it('gets a single Docs revision from the top-level /revisions path', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ revision: { id: 'r1', articleId: 'a1', text: '<p>old</p>' } })
+    );
+
+    const res = await client.getDocsArticleRevision('r1');
+
+    expect(res.revision.text).toBe('<p>old</p>');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/revisions/r1');
+  });
+
+  it('increments article views, sending count only when provided', async () => {
+    fetchMock
+      .mockResolvedValueOnce(new Response(null, { status: 200 }))
+      .mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    await client.incrementDocsArticleViews('a1', 5);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/articles/a1/views');
+    expect(fetchMock.mock.calls[0][1].method).toBe('PUT');
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body as string)).toEqual({ count: 5 });
+
+    await client.incrementDocsArticleViews('a1');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body as string)).toEqual({});
+  });
+
+  it('lists Docs sites over the Docs API', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ sites: { page: 1, pages: 1, count: 1, items: [{ id: 's1', title: 'Help' }] } })
+    );
+
+    const res = await client.listDocsSites();
+
+    expect(res.sites.items[0].id).toBe('s1');
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/sites');
+  });
+
+  it('uses the restrictions/restricted path asymmetry for site restrictions', async () => {
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ enabled: false }))
+      .mockResolvedValueOnce(
+        Response.json({ enabled: true, callbackConfiguration: { sharedSecret: 'sek' } })
+      );
+
+    await client.getDocsSiteRestrictions('s1');
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://docsapi.helpscout.net/v1/sites/s1/restrictions'
+    );
+    expect(fetchMock.mock.calls[0][1].method).toBe('GET');
+
+    const res = await client.updateDocsSiteRestrictions('s1', { enabled: true });
+    expect(fetchMock.mock.calls[1][0]).toBe('https://docsapi.helpscout.net/v1/sites/s1/restricted');
+    expect(fetchMock.mock.calls[1][1].method).toBe('PUT');
+    expect(res.callbackConfiguration?.sharedSecret).toBe('sek');
+  });
+
+  it('finds a redirect by url + siteId with the distinct redirectedUrl shape', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ redirectedUrl: { redirect: '/new', number: 42 } })
+    );
+
+    const res = await client.findDocsRedirect({ url: '/old', siteId: 's1' });
+
+    expect(res.redirectedUrl?.redirect).toBe('/new');
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://docsapi.helpscout.net/v1/redirects?url=%2Fold&siteId=s1'
+    );
+  });
+
+  it('reads Docs collections over the Docs API with Basic auth on success', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        collections: {
+          page: 1,
+          pages: 1,
+          count: 1,
+          items: [{ id: 'abc', name: 'Shadow KB', visibility: 'private' }],
+        },
+      })
+    );
+
+    const result = await client.listDocsCollections();
+
+    expect(result.collections.items[0]).toMatchObject({ id: 'abc', name: 'Shadow KB' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe('https://docsapi.helpscout.net/v1/collections');
+    const expectedAuth = `Basic ${Buffer.from('docs-key:X').toString('base64')}`;
+    expect((fetchMock.mock.calls[0][1].headers as Record<string, string>).Authorization).toBe(
+      expectedAuth
+    );
   });
 
   it('creates a customer thread and returns the new thread id', async () => {
