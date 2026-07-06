@@ -2071,10 +2071,9 @@ export class HelpScoutClient {
     });
   }
 
-  // PUT /collections/{id}. The API requires `name` on every PUT; full-vs-merge is
-  // undocumented, so send only provided fields plus the current name (read if
-  // omitted). If the endpoint is actually full-replace, fields you don't pass may
-  // reset — verify before relying on preservation.
+  // PUT /collections/{id}. The API requires `name` on every PUT but merges: omitted
+  // fields are preserved (verified live 2026-07-06 — visibility/description survived a
+  // name-only PUT). Send only provided fields plus the current name (read if omitted).
   async updateDocsCollection(
     collectionId: string,
     data: Partial<DocsCollectionInput>
@@ -2108,10 +2107,11 @@ export class HelpScoutClient {
     });
   }
 
-  // PUT /categories/{id}. Requires `name`; full-vs-merge undocumented. Send only
-  // provided fields plus the current name (resolved via the collection's category
-  // list, since there is no single-category GET). collectionId is needed only for
-  // that name resolution.
+  // PUT /categories/{id}. Requires `name` but merges: omitted fields are preserved
+  // (verified live 2026-07-06 — visibility/defaultSort survived a name-only PUT).
+  // Send only provided fields plus the current name (resolved via the collection's
+  // category list, since there is no single-category GET). collectionId is needed
+  // only for that name resolution.
   async updateDocsCategory(
     categoryId: string,
     collectionId: string,

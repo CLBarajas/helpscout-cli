@@ -5,6 +5,29 @@ Full Help Scout Docs API support (CLI + MCP) is implemented and unit-tested; thi
 plan to verify the parts that can only be confirmed against the live API. Written so a
 fresh session can execute it cold.
 
+## ✅ EXECUTED 2026-07-06 — all live checks pass
+
+- **§1 Article round-trip** (Draft KB sandbox): create returned the full object
+  (`?reload=true` works) with `status: notpublished`; name-only update preserved
+  text/status (partial merge confirmed); draft save/view/discard isolated from the
+  published body (`hasDraft` flips correctly); delete confirmed via 404. Sandbox clean.
+  Quirk: a PUT stamps `lastPublishedAt` even while status stays `notpublished` —
+  metadata-only, harmless.
+- **§2a Collection AND category PUT = MERGE**, each verified directly with its own
+  name-only update (category: visibility/defaultSort survived, re-list confirmed;
+  collection: visibility/description survived on a throwaway private collection,
+  deleted after — real collections' order re-verified intact 1–4). Caveats dropped
+  from `API_COVERAGE.md`, CLI/MCP descriptions, and api-client comments.
+- **§2b Redirect create** on the Nucleus site: optional `type` accepted (no
+  unknown-field rejection); the API normalizes the value — sent `custom-url`, stored
+  `"custom"`. Test redirect deleted; site back to 0 redirects.
+- **§3 Sites:** left read-only per plan (full-replace is by design, production-only).
+- **§4 MCP:** all 36 `docs_*` tools surfaced in a live Claude Code session;
+  `docs_list_collections` + `docs_search_articles` verified end-to-end against real data.
+
+Remaining from §5 unchanged: assets intentionally unimplemented; Shadow Docs Python
+bridge repoint is a later, separate task.
+
 ## What's already done
 
 - **Build/verify gates pass:** `bun run typecheck`, `bun run lint` (0/0), `bun run test`

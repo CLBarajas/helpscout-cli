@@ -81,10 +81,10 @@ Commands under `helpscout docs …`; 36 paired MCP tools (16 read, 20 write). Fo
 upstream has no Docs support.
 
 ## Collections
-- ✅ list, view (id-or-number), create, update, delete
+- ✅ list, view (id-or-number), create, update (merge), delete
 
 ## Categories
-- ✅ list (by collection), create, update, delete, reorder
+- ✅ list (by collection), create, update (merge), delete, reorder
 
 ## Articles
 - ✅ list (by collection or category), view (id-or-number, `--draft`), search, related
@@ -114,9 +114,11 @@ upstream has no Docs support.
   `requestForCreation`, which reads a `Resource-ID` header the Docs API doesn't send).
 - **Publish posture:** article create defaults to `notpublished`; publishing is explicit
   (`--publish` / `status:published`). Publishing discards the draft.
-- **Unverified live** (see `DOCS_API_TESTING.md`): collection/category PUT full-vs-merge
-  (we send provided-fields-only + the API-required name); redirect-create optional-field
-  passthrough. Only `assets` remains unimplemented — intentional.
+- **Write surface verified live 2026-07-06** (see `DOCS_API_TESTING.md`): article
+  create/update/draft/delete round-trip; collection and category PUT are **merge**
+  (omitted fields preserved); redirect create accepts the optional fields (the API
+  normalizes `type` — sent `custom-url`, stored `custom`). Only `assets` remains
+  unimplemented — intentional.
 
 ## Notes
 - All new client methods are covered by `src/lib/api-client.test.ts` (mock-fetch:

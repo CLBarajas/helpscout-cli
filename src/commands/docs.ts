@@ -68,7 +68,7 @@ export function createDocsCommand(): Command {
     );
   collections
     .command('update')
-    .description('Update a Docs collection (pass the fields to set; full-vs-merge is unverified)')
+    .description('Update a Docs collection (merge: pass only the fields to change)')
     .argument('<id>', 'Collection ID')
     .option('--name <name>', 'Collection name (must be unique per account)')
     .option('--visibility <visibility>', 'Visibility (public, private)')
@@ -177,7 +177,7 @@ export function createDocsCommand(): Command {
     );
   categories
     .command('update')
-    .description('Update a category (requires --collection; full-vs-merge is unverified)')
+    .description('Update a category (requires --collection; merge: pass only the fields to change)')
     .argument('<id>', 'Category ID')
     .requiredOption('--collection <id>', 'Collection ID the category belongs to')
     .option('--name <name>', 'Category name (must be unique within the collection)')

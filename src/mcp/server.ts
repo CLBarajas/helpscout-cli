@@ -3005,7 +3005,7 @@ const DOCS_WRITE_TOOLS: Array<{
     name: 'docs_update_collection',
     title: 'Update Docs Collection',
     description:
-      'Update a Help Scout Docs collection. The API requires name on every PUT, so this reads the current name when you omit it. Full-vs-merge is undocumented — pass the fields you want set. Pass siteId to move the collection to a different site.',
+      'Update a Help Scout Docs collection. Merge semantics: omitted fields are preserved — pass only the fields to change. The API requires name on every PUT, so this reads the current name when you omit it. Pass siteId to move the collection to a different site.',
     inputSchema: {
       collectionId: z.string().describe('Collection ID'),
       name: z.string().optional().describe('Collection name (must be unique per account)'),
@@ -3050,7 +3050,7 @@ const DOCS_WRITE_TOOLS: Array<{
     name: 'docs_update_category',
     title: 'Update Docs Category',
     description:
-      'Update a Help Scout Docs category. collectionId is required to resolve current values (there is no single-category GET). The API requires name on every PUT; full-vs-merge is undocumented — pass the fields you want set.',
+      'Update a Help Scout Docs category. Merge semantics: omitted fields are preserved — pass only the fields to change. collectionId is required to resolve the current name (there is no single-category GET).',
     inputSchema: {
       categoryId: z.string().describe('Category ID'),
       collectionId: z.string().describe('Collection ID the category belongs to'),
