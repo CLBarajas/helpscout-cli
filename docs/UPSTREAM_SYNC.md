@@ -10,19 +10,20 @@ place to rot instead of several.
 - **Issue-level detail (open upstream issues + fork-side state):** [`UPSTREAM_ISSUES_PLAN.md`](UPSTREAM_ISSUES_PLAN.md)
 - **Tool inventory / API coverage (source of truth):** [`API_COVERAGE.md`](API_COVERAGE.md)
 
-## Current state (verified 2026-06-23)
+## Current state (verified 2026-07-08)
 
 | | |
 |---|---|
-| Fork HEAD | `09a8606` (merge of `upstream/main`) |
-| `package.json` version | `2.16.1` (tracks upstream's number; cosmetic) |
-| vs `upstream/main` (`38901b2`) | **0 behind, 57 ahead** — caught up to main |
-| Push state | `main` ahead of `origin/main` — **Chris pushes manually; never push without his say-so** |
+| Fork HEAD | `bfe0d84` (merge of `upstream/main`) + README/positioning commit on top |
+| `package.json` version | `2.16.1` (tracks upstream's number; cosmetic — #58 didn't bump it) |
+| vs `upstream/main` (`dc1b7a6`) | **0 behind, ~70 ahead** — caught up to main |
+| Push state | pushed to `origin/main` 2026-07-08 — **Chris pushes manually; never push without his say-so** |
 
 ## Merge history (recent)
 
 | Merged | Upstream point | Fork commit | Notes |
 |--------|----------------|-------------|-------|
+| 2026-07-08 | `upstream/main` @ `dc1b7a6` (#58 dep bumps) | `bfe0d84` | commander 15 + html-to-text 10 + TS 6 adopted (typecheck / 89 tests / build all green); zod held at 3.x by upstream itself; kept fork's `mime-types`. Conflicts: package.json (adjacent adds) + bun.lock (regenerated) |
 | 2026-06-23 | `upstream/main` @ `38901b2` (v2.16.1 + #51) | `09a8606` | #50 output-schema passthrough + #51 CI bump |
 | 2026-06-12 | v2.16.0 | `bea4efd` | "Fortress GTD triage" |
 | 2026-06-10 | v2.15.0 | `45df349` | |

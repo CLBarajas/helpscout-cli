@@ -1,18 +1,23 @@
 # Help Scout CLI
 
-[![npm version](https://img.shields.io/npm/v/@stephendolan/helpscout-cli.svg)](https://www.npmjs.com/package/@stephendolan/helpscout-cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A CLI for Help Scout's Mailbox API 2.0. JSON output by default for LLM and automation workflows.
+A CLI and MCP server for Help Scout's Mailbox and Docs APIs. JSON output by default for LLM and automation workflows.
+
+> **About this fork:** an extended fork of [stephendolan/helpscout-cli](https://github.com/stephendolan/helpscout-cli), adding near-complete Mailbox API coverage (teams, saved replies, custom fields, webhooks, reports, routing, and more), full Docs API support, and an MCP server that mirrors the entire CLI surface (~170 tools). See [docs/API_COVERAGE.md](docs/API_COVERAGE.md) for the full matrix.
 
 ## Installation
 
-```bash
-bun install -g @stephendolan/helpscout-cli
+This fork installs from source:
 
-# Or run without installing
-bunx @stephendolan/helpscout-cli conversations list
+```bash
+git clone https://github.com/CLBarajas/helpscout-cli.git
+cd helpscout-cli
+bun install
+bun run link   # builds and links globally as `helpscout`
 ```
+
+The upstream CLI (without this fork's additions) is available from npm: `bun install -g @stephendolan/helpscout-cli`
 
 **Linux**: Requires `libsecret` for keychain storage (`apt install libsecret-1-dev`), or use environment variables.
 
@@ -225,7 +230,7 @@ Run as an MCP server for AI agent integration:
 helpscout mcp
 ```
 
-The MCP server exposes:
+In this fork, the MCP server mirrors the full CLI surface — ~170 tools spanning conversations, customers, mailboxes, saved replies, teams, tags, workflows, webhooks, reports, and the Docs API — with CLI/MCP parity enforced by tests (see [docs/API_COVERAGE.md](docs/API_COVERAGE.md)). Core behaviors:
 
 - Typed tools for Help Scout search, full conversation detail, full conversation thread history, mailbox/customer/user lookup, and safe draft-note/status mutations
 - `get_conversation` accepts internal conversation IDs or visible ticket numbers like `#12345`
