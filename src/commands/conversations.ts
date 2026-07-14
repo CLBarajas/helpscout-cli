@@ -149,6 +149,7 @@ export function createConversationsCommand(): Command {
       'Advanced search query (see https://docs.helpscout.com/article/47-search-filters-with-operators)'
     )
     .option('--summary', 'Output aggregated summary instead of full conversation list')
+    .option('--all', 'Fetch every matching conversation across all pages (respects filters)')
     .action(
       withErrorHandling(
         async (options: {
@@ -166,6 +167,7 @@ export function createConversationsCommand(): Command {
           embed?: string;
           query?: string;
           summary?: boolean;
+          all?: boolean;
         }) => {
           const query = buildDateQuery(
             {
@@ -188,6 +190,19 @@ export function createConversationsCommand(): Command {
             });
             const summary = summarizeConversations(allConversations);
             outputJson(summary);
+            return;
+          }
+
+          if (options.all) {
+            const allConversations = await client.listAllConversations({
+              mailbox: options.mailbox,
+              status: options.status,
+              tag: options.tag,
+              assignedTo: options.assignedTo,
+              query,
+              embed: options.embed,
+            });
+            outputJson({ conversations: allConversations, count: allConversations.length });
             return;
           }
 

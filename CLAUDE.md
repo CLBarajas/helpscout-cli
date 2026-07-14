@@ -43,6 +43,7 @@ The CLI follows a command-based architecture built on Commander.js:
   - **output.ts**: JSON output formatting
   - **errors.ts**: Centralized error handling for Help Scout API errors
   - **command-utils.ts**: Shared command helpers
+  - **query-params.ts**: Shapes outgoing query params so a wrong key can't silently no-op (HS ignores unknown params). `buildWireParams` + per-endpoint specs for caller-supplied filter dicts (conversations/customers/users/workflows) — remaps camel→snake wire keys (`assignedTo`→`assigned_to`, workflows `mailbox`→`mailboxId`) and drops off-spec keys with a dev warning; `toQueryParams` for the typed reports family (no renames — just de-cast + drop undefined).
 - **src/types/**: TypeScript type definitions
 
 ### Authentication Flow

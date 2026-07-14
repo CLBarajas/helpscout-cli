@@ -1,5 +1,13 @@
 import { auth } from './auth.js';
 import { HelpScoutCliError, HelpScoutApiError } from './errors.js';
+import {
+  CONVERSATION_LIST_PARAMS,
+  CUSTOMER_LIST_PARAMS,
+  USER_LIST_PARAMS,
+  WORKFLOW_LIST_PARAMS,
+  buildWireParams,
+  toQueryParams,
+} from './query-params.js';
 import type {
   Conversation,
   ConversationStatus,
@@ -605,10 +613,14 @@ export class HelpScoutClient {
       query?: string;
     } = {}
   ) {
+    // Translate to HS's exact query keys before sending. This remaps the assignee
+    // filter to its snake_case wire key `assigned_to` (HS silently ignores the
+    // camelCase `assignedTo`, so without this the filter is a no-op that returns the
+    // whole folder) and gates every key through the endpoint's known-param spec.
     const response = await this.request<PaginatedResponse<{ conversations: Conversation[] }>>(
       'GET',
       '/conversations',
-      { params }
+      { params: buildWireParams(params, CONVERSATION_LIST_PARAMS) }
     );
     return {
       conversations: response._embedded?.conversations || [],
@@ -926,7 +938,7 @@ export class HelpScoutClient {
     const response = await this.request<PaginatedResponse<{ customers: Customer[] }>>(
       'GET',
       '/customers',
-      { params }
+      { params: buildWireParams(params, CUSTOMER_LIST_PARAMS) }
     );
     return {
       customers: response._embedded?.customers || [],
@@ -1378,7 +1390,7 @@ export class HelpScoutClient {
     const response = await this.request<PaginatedResponse<{ workflows: Workflow[] }>>(
       'GET',
       '/workflows',
-      { params: { mailboxId: params.mailbox, type: params.type, page: params.page } }
+      { params: buildWireParams(params, WORKFLOW_LIST_PARAMS) }
     );
     return {
       workflows: response._embedded?.workflows || [],
@@ -1430,7 +1442,7 @@ export class HelpScoutClient {
           mention?: string;
         }>;
       }>
-    >('GET', '/users', { params: { email: params.email, mailbox: params.mailbox, page: params.page } });
+    >('GET', '/users', { params: buildWireParams(params, USER_LIST_PARAMS) });
     return {
       users: response._embedded?.users || [],
       page: response.page,
@@ -1692,44 +1704,44 @@ export class HelpScoutClient {
   // Reports (Plus/Pro plans only)
   async getCompanyReport(params: ReportParams): Promise<CompanyReport> {
     return this.request<CompanyReport>('GET', '/reports/company', {
-      params: params as unknown as Record<string, string | number | boolean | undefined>,
+      params: toQueryParams(params),
     });
   }
 
   async getConversationsReport(params: ReportParams): Promise<ConversationsReport> {
     return this.request<ConversationsReport>('GET', '/reports/conversations', {
-      params: params as unknown as Record<string, string | number | boolean | undefined>,
+      params: toQueryParams(params),
     });
   }
 
   async getProductivityReport(params: ProductivityReportParams): Promise<ProductivityReport> {
     return this.request<ProductivityReport>('GET', '/reports/productivity', {
-      params: params as unknown as Record<string, string | number | boolean | undefined>,
+      params: toQueryParams(params),
     });
   }
 
   async getFirstResponseTimeReport(params: TimeSeriesReportParams): Promise<FirstResponseTimeReport> {
     return this.request<FirstResponseTimeReport>('GET', '/reports/productivity/first-response-time', {
-      params: params as unknown as Record<string, string | number | boolean | undefined>,
+      params: toQueryParams(params),
     });
   }
 
   async getHappinessReport(params: ReportParams): Promise<HappinessReport> {
     return this.request<HappinessReport>('GET', '/reports/happiness', {
-      params: params as unknown as Record<string, string | number | boolean | undefined>,
+      params: toQueryParams(params),
     });
   }
 
   async getHappinessRatings(params: HappinessRatingsParams): Promise<HappinessRatingsReport> {
     return this.request<HappinessRatingsReport>('GET', '/reports/happiness/ratings', {
-      params: params as unknown as Record<string, string | number | boolean | undefined>,
+      params: toQueryParams(params),
     });
   }
 
   // Helper for the expanded GET report endpoints (all share the params-cast shape).
   private getReport<T>(path: string, params: object): Promise<T> {
     return this.request<T>('GET', path, {
-      params: params as unknown as Record<string, string | number | boolean | undefined>,
+      params: toQueryParams(params),
     });
   }
 

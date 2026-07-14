@@ -1028,14 +1028,14 @@ server.registerTool(
 
 rememberTool(
   'search_conversations',
-  'Search conversations matching a query. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. WARNING: Compound filters are unreliable — use one filter per call.'
+  'Search conversations matching a query, across all pages. Filter by assignee with assignedTo (a user id) to fetch everything assigned to someone server-side. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. WARNING: Compound query-string filters are unreliable — use one filter per call.'
 );
 server.registerTool(
   'search_conversations',
   {
     title: 'Search Conversations',
     description:
-      'Search conversations matching a query. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. WARNING: Compound filters are unreliable — use one filter per call.',
+      'Search conversations matching a query, across all result pages. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. Use assignedTo (a user id) to fetch every conversation assigned to someone — it filters server-side and composes with status. WARNING: Compound query-string filters are unreliable — use one filter per call.',
     inputSchema: {
       query: z
         .string()
@@ -1047,6 +1047,12 @@ server.registerTool(
         .enum(['active', 'pending', 'closed', 'spam', 'all'])
         .optional()
         .describe('Status filter (defaults to "all")'),
+      assignedTo: z
+        .string()
+        .optional()
+        .describe(
+          'User ID to filter by assignee (server-side, across all pages). Get the id from list_users.'
+        ),
       maxResults: z
         .number()
         .optional()
@@ -1062,6 +1068,7 @@ server.registerTool(
   async ({
     query,
     status = 'all',
+    assignedTo,
     maxResults,
     createdSince,
     createdBefore,
@@ -1073,7 +1080,10 @@ server.registerTool(
       { createdSince, createdBefore, modifiedSince, modifiedBefore },
       normalizedQuery
     );
-    const all = await client.listAllConversations({ query: dateQuery, status }, maxResults);
+    const all = await client.listAllConversations(
+      { query: dateQuery, status, assignedTo },
+      maxResults
+    );
     return structuredJsonResult(withOmissionMeta(all, maxResults));
   }
 );

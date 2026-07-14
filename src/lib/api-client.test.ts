@@ -73,6 +73,105 @@ describe('HelpScoutClient', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  function emptyConversationsPage() {
+    return Response.json({
+      _embedded: { conversations: [] },
+      page: { size: 0, totalElements: 0, totalPages: 1, number: 1 },
+    });
+  }
+
+  it('sends the full conversation filter set with assignedTo remapped to assigned_to', async () => {
+    fetchMock.mockResolvedValueOnce(emptyConversationsPage());
+
+    await client.listConversations({
+      mailbox: '164710',
+      status: 'active',
+      tag: 'billing',
+      assignedTo: '320911',
+      sortField: 'createdAt',
+      sortOrder: 'desc',
+      page: 2,
+      embed: 'threads',
+      query: 'subject:refund',
+    });
+
+    // Locks the entire wire-key set: everything is verbatim except the assignee
+    // filter, which HS only honors as snake_case `assigned_to` (the camelCase key is
+    // silently ignored). Guards against a future rename quietly no-op'ing a filter.
+    const url = new URL(fetchMock.mock.calls[0][0] as string);
+    expect(Object.fromEntries(url.searchParams.entries())).toEqual({
+      mailbox: '164710',
+      status: 'active',
+      tag: 'billing',
+      assigned_to: '320911',
+      sortField: 'createdAt',
+      sortOrder: 'desc',
+      page: '2',
+      embed: 'threads',
+      query: 'subject:refund',
+    });
+    expect(url.search).not.toContain('assignedTo');
+  });
+
+  it('omits the assigned_to key entirely when no assignee filter is given', async () => {
+    fetchMock.mockResolvedValueOnce(emptyConversationsPage());
+
+    await client.listConversations({ status: 'active' });
+
+    // No stray `assigned_to=undefined` — an absent filter must send no key at all.
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).not.toContain('assigned');
+    expect(url).toContain('status=active');
+  });
+
+  it('carries the assignee filter through every listAllConversations page as assigned_to', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        _embedded: { conversations: [{ id: 1 }] },
+        page: { size: 1, totalElements: 1, totalPages: 1, number: 1 },
+      })
+    );
+
+    // This is the path search_conversations uses — the all-pages fetch must filter by
+    // assignee server-side, not return the whole folder.
+    await client.listAllConversations({ status: 'active', assignedTo: '320911' });
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain('assigned_to=320911');
+    expect(url).toContain('page=1');
+  });
+
+  it('remaps the workflows mailbox filter to mailboxId on the wire', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        _embedded: { workflows: [] },
+        page: { size: 0, totalElements: 0, totalPages: 1, number: 1 },
+      })
+    );
+
+    await client.listWorkflows({ mailbox: 164710, type: 'manual' });
+
+    // HS silently ignores ?mailbox= on /workflows; the filter only works as ?mailboxId=.
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain('mailboxId=164710');
+    expect(url).toContain('type=manual');
+    expect(url).not.toContain('mailbox=');
+  });
+
+  it('sends the users email filter under the email key', async () => {
+    fetchMock.mockResolvedValueOnce(
+      Response.json({
+        _embedded: { users: [] },
+        page: { size: 0, totalElements: 0, totalPages: 1, number: 1 },
+      })
+    );
+
+    await client.listUsers({ email: 'paul@rogueamoeba.com' });
+
+    const url = fetchMock.mock.calls[0][0] as string;
+    expect(url).toContain('email=paul%40rogueamoeba.com');
+  });
+
   it('sends a status patch request', async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
 

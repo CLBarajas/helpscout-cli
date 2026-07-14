@@ -1,7 +1,7 @@
 # Help Scout CLI Coverage Matrix
 
 **Goal:** full Help Scout **Mailbox API** (Inbox API 2.0) **and Docs API** coverage via the `helpscout` CLI.
-**Last updated:** 2026-06-26. Endpoint groups verified against developer.helpscout.com.
+**Last updated:** 2026-07-14. Endpoint groups verified against developer.helpscout.com.
 
 Legend: ✅ covered · ◑ partial · ⬜ not yet · ⏸ parked (intentional)
 
@@ -10,6 +10,9 @@ Legend: ✅ covered · ◑ partial · ⬜ not yet · ⏸ parked (intentional)
 
 ## Conversations
 - ✅ list, view (+`--v3`), create, update, delete
+- ✅ list filters: mailbox, status, tag, **assignee (`assignedTo` → HS's snake_case `assigned_to`)**,
+  sort, date range; `conversations list --all` and `search_conversations` page through the
+  full filtered set (assignee filter included)
 - Threads: ✅ list (+`--v3`), note, draft-reply, update-thread, **add-customer/chat/phone-thread**, **thread-source (+`--rfc822`)**
 - Threads scheduling: ✅ **schedule-thread / publish-schedule / unschedule-thread**
 - ✅ attachments: list, attachment-download (✅ now streams via `/file` with base64 fallback),
@@ -123,6 +126,23 @@ upstream has no Docs support.
 ## Notes
 - All new client methods are covered by `src/lib/api-client.test.ts` (mock-fetch:
   asserts paths, versions, `_embedded` keys, request bodies).
+- **All query params go through `src/lib/query-params.ts`.** Help Scout silently ignores
+  unknown query params (200 + *unfiltered* results), so a camel/snake mismatch on a filter
+  is an invisible no-op — this is what made `assignedTo` return the whole folder until
+  2026-07-14. Two modes:
+  - **`buildWireParams(params, spec)`** — caller-supplied filter dictionaries
+    (**conversations, customers, users, workflows**). Remaps each public param to its exact
+    HS wire key per an endpoint spec and drops any off-spec key with a dev warning. Two
+    live-verified wire-key exceptions are declared (both would otherwise no-op): List
+    Conversations' assignee filter is `assigned_to` (public param stays `assignedTo`), and
+    List Workflows' mailbox filter is `mailboxId` (HS ignores plain `mailbox`). Add a new
+    filter to the spec, never straight into the params object.
+  - **`toQueryParams(params)`** — the **reports** family. Typed closed interfaces that match
+    HS verbatim (verified live: `previousStart`/`previousEnd`/`officeHours`/`viewBy` are
+    honored; unknown keys ignored), so no allowlist is needed — this drops `undefined` and
+    replaced the scattered `as unknown as Record<…>` casts with one audited path.
+  - Trivial `page`/`embed`/`async` params are single identity keys built literally
+    in-method and left as-is.
 - **MCP parity DONE (2026-06-15):** all coverage batches now have MCP tools too —
   webhooks, system-users, customer sub-resources + extras, mailbox folders/routing,
   threads (create/source/schedule), users create/delete, ratings, and the 26 expanded
