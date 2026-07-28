@@ -115,6 +115,23 @@ export interface Thread {
   openedAt?: string;
 }
 
+export interface AttachmentDownload {
+  data: Uint8Array;
+  contentType?: string;
+  contentLength?: number;
+  contentDisposition?: string;
+}
+
+export interface AttachmentDownloadResult {
+  message: 'Attachment downloaded';
+  conversationId: number;
+  attachmentId: number;
+  filename: string;
+  path: string;
+  bytes: number;
+  contentType?: string;
+}
+
 export interface Customer {
   id: number;
   firstName?: string;

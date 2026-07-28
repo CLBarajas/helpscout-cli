@@ -3,6 +3,7 @@ import { HelpScoutCliError, HelpScoutApiError } from './errors.js';
 import type {
   Conversation,
   ConversationStatus,
+  AttachmentDownload,
   Customer,
   DraftConversationStatus,
   Tag,
@@ -333,6 +334,25 @@ export class HelpScoutClient {
     } while (page <= totalPages);
 
     return threads;
+  }
+
+  async downloadAttachment(
+    conversationId: number,
+    attachmentId: number
+  ): Promise<AttachmentDownload> {
+    const response = await this.rawRequest(
+      'GET',
+      `/conversations/${conversationId}/attachments/${attachmentId}/file`
+    );
+    const data = new Uint8Array(await response.arrayBuffer());
+    const contentLength = response.headers.get('Content-Length');
+
+    return {
+      data,
+      contentType: response.headers.get('Content-Type') ?? undefined,
+      contentLength: contentLength ? parseInt(contentLength, 10) : undefined,
+      contentDisposition: response.headers.get('Content-Disposition') ?? undefined,
+    };
   }
 
   async updateConversation(
