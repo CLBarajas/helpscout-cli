@@ -13,10 +13,21 @@ Legend: ✅ covered · ◑ partial · ⬜ not yet · ⏸ parked (intentional)
 - ✅ list filters: mailbox, status, tag, **assignee (`assignedTo` → HS's snake_case `assigned_to`)**,
   sort, date range; `conversations list --all` and `search_conversations` page through the
   full filtered set (assignee filter included)
+  - *Parity note (2026-08-05, `eef175b`):* this line previously overstated things —
+    `search_conversations` did **not** accept `mailbox` or `tag`, so the MCP tool documented as
+    the page-through-everything path could not scope to a mailbox and silently returned the
+    highest-volume one. Added there and on `search_by_customer`; `assignedTo` added to
+    `get_conversations_summary`; `mailbox` added to `list_customers`. Parity is now real and
+    locked by a test in `src/mcp/server.test.ts`.
 - Threads: ✅ list (+`--v3`), note, draft-reply, update-thread, **add-customer/chat/phone-thread**, **thread-source (+`--rfc822`)**
 - Threads scheduling: ✅ **schedule-thread / publish-schedule / unschedule-thread**
-- ✅ attachments: list, attachment-download (✅ now streams via `/file` with base64 fallback),
-  attachment-upload, attachment-delete
+- ✅ attachments: list, attachment-download (via `/file` with base64 fallback on 404/410; note
+  neither leg actually streams — both buffer via `arrayBuffer()`, the win is escaping the base64
+  endpoint's ~33% inflation), attachment-upload, attachment-delete
+  - Write layer hardened 2026-08-05 from upstream `30bc16a`: `-f/--force`, atomic temp-write with
+    an EEXIST guard (the previous `writeFileSync` silently clobbered), recursive `mkdir`, and
+    directory-output mode. Filenames come from `listConversationAttachments`, **not**
+    Content-Disposition — upstream parses that header only because it has no such endpoint.
 - ✅ custom fields (fields/set-field), tags (add/remove), snooze/unsnooze
 
 ## Customers

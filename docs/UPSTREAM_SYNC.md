@@ -87,13 +87,45 @@ test would have caught them. Check for recurrences on every future sync:
 - **Attachment surface** — upstream now has its own attachment command group and
   `attachment-download.ts`. Every future sync will re-propose the nested `attachments download`
   namespace. Keep ours flat: ~15 outboard files reference `attachment-download` by name.
-- **zod 4 wire-format change (open decision).** Under zod 4 the MCP SDK swaps JSON-Schema
-  converters and stops emitting `"additionalProperties": false` on tool `inputSchema`s.
-  Measured over a live `tools/list` on both builds: **164 of 168 tools had it under zod 3.25.76;
-  0 of 169 have it under 4.4.3.** `outputSchema` is unaffected (18 of 21 keep it). No gate
-  detects this — it surfaces only as looser argument validation in MCP clients. We have zero
-  `.strict()` input objects (every `inputSchema` is a bare `ZodRawShape`). **Undecided:** accept
-  the looser schema, or restore it with `.strict()`.
+- **zod 4 `additionalProperties` change — investigated 2026-08-05, recommendation: do nothing.**
+  Under zod 4 the MCP SDK stops emitting `"additionalProperties": false` on tool `inputSchema`s.
+  Measured over a live `tools/list` on both builds: **164 of 168 had it under zod 3.25.76; 0 of
+  169 under 4.4.3.** `outputSchema` is unaffected (18 of 21 keep it).
+
+  **An earlier revision of this entry called the fix "restore it with `.strict()`". That word was
+  wrong and inverted the decision — there is nothing to restore.** The constraint was advertised
+  but never enforced, on either end:
+  - A bare `z.object` **strips** unknown keys in zod 3 *and* zod 4; it has never rejected.
+    Verified end-to-end over real MCP stdio on both builds — an extra `bogusExtraArg` succeeded
+    under zod 3 *while that tool's advertised schema said `additionalProperties: false`*.
+  - The reference SDK client validates **output only**: `client/index.js` has 0 input-validator
+    references and 6 output-validator references.
+  - Mechanism: the SDK branches on zod major in
+    `@modelcontextprotocol/sdk/.../server/zod-json-schema-compat.js`. zod 3 → vendored
+    `zod-to-json-schema`, which emits `additionalProperties: false` for a bare object regardless.
+    zod 4 → `z4mini.toJSONSchema(schema, { io: 'input' })`, which correctly omits it, because on
+    *input* extra keys genuinely are permitted (they get stripped). Confirmed directly:
+    bare+`io:input` → undefined; bare+`io:output` → false; `.strict()`+either → false.
+
+  So **zod 4 did not weaken anything; it stopped misdescribing something.** Adding `.strict()`
+  would be a *new* runtime behavior — strip → throw (`unrecognized_keys`) — introduced for the
+  first time in this tool's history, across a surface where the client never enforced it anyway
+  and where our own skills/`CLAUDE.md` hardcode call shapes that a future param rename would then
+  break all at once instead of degrading. Recommendation: leave it, and re-read this entry rather
+  than re-deriving it at the next zod bump.
+
+  **What the investigation actually turned up is unrelated to strictness** and is fixed in
+  `eef175b`: four tools declared a *narrower* surface than the client methods they call
+  (`search_conversations` and `search_by_customer` lacked `mailbox`/`tag`,
+  `get_conversations_summary` lacked `assignedTo`, `list_customers` lacked `mailbox`), so a caller
+  could not express a scope the API supports and got an unscoped result reported as success.
+  **`.strict()` is blind to that class** — the keys were not unknown, they were absent. Locked by
+  a floors-not-shapes test in `src/mcp/server.test.ts`.
+
+  Still UNVERIFIED: whether any provider-side constrained tool-call decoder uses
+  `inputSchema.additionalProperties` to shape sampling — the one place advertising it could have
+  real teeth. And no real near-miss has ever been *observed* on this server; there is no telemetry
+  that would have caught one, so "never happened" and "never noticed" are not distinguishable.
 - **#47 "expose full HelpScout triage tools"** (already in `upstream/main`, merged here) —
   upstream is independently rebuilding the fork's triage surface. Future overlaps land here;
   resolve toward the broader/fork implementation per the wholesale-merge stance.
