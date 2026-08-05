@@ -147,8 +147,12 @@ upstream has no Docs support.
   webhooks, system-users, customer sub-resources + extras, mailbox folders/routing,
   threads (create/source/schedule), users create/delete, ratings, and the 26 expanded
   reports. All use the registerTool idiom with read-only/mutating/destructive annotations;
-  the registry-parity test guards `search_tools` discovery. MCP server now serves **168
-  tools** (132 Mailbox + 36 Docs). Not exposed via MCP: streaming attachment download (base64
-  `get_attachment_data` already serves MCP transport).
+  the registry-parity test guards `search_tools` discovery. MCP server now serves **169
+  tools** (133 Mailbox + 36 Docs), verified live via `tools/list` on 2026-08-05.
+- **`download_attachment` added 2026-08-05** (adopted from upstream `770d234` in the v2.17.1
+  merge). This supersedes the prior note that attachment download was "not exposed via MCP" —
+  it now is. It is the only attachment tool that **writes a file to the local filesystem**
+  (annotated `MUTATING_LOCAL_REMOTE_ANNOTATIONS`); `get_attachment_data` still serves the
+  base64-over-transport case where the caller wants bytes rather than a file.
 - v3 endpoints (Get Conversation, List Threads, List Customers, System Users) route via
   the version-aware `request()` (`version: 'v3'`).
