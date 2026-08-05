@@ -11,6 +11,7 @@ import {
 import type {
   Conversation,
   ConversationStatus,
+  AttachmentDownload,
   Customer,
   CustomerAddress,
   CustomerAddressInput,
@@ -318,6 +319,17 @@ interface AuthProvider {
   getAppId(): Promise<string | null>;
   getAppSecret(): Promise<string | null>;
   getDocsApiKey(): Promise<string | null>;
+}
+
+async function toAttachmentDownload(response: Response): Promise<AttachmentDownload> {
+  const contentLength = response.headers.get('Content-Length');
+
+  return {
+    data: new Uint8Array(await response.arrayBuffer()),
+    contentType: response.headers.get('Content-Type') ?? undefined,
+    contentLength: contentLength ? parseInt(contentLength, 10) : undefined,
+    contentDisposition: response.headers.get('Content-Disposition') ?? undefined,
+  };
 }
 
 export class HelpScoutClient {
@@ -826,8 +838,15 @@ export class HelpScoutClient {
       user?: number;
     }
   ) {
+    const conversation = await this.getConversation(conversationId);
+    const customerId = conversation?.primaryCustomer?.id;
+    if (!customerId) {
+      throw new Error(
+        `Cannot create draft reply: conversation ${conversationId} has no primary customer`
+      );
+    }
     await this.request<void>('POST', `/conversations/${conversationId}/reply`, {
-      body: { ...data, draft: true },
+      body: { ...data, customer: { id: customerId }, draft: true },
     });
   }
 
@@ -1648,7 +1667,10 @@ export class HelpScoutClient {
   // inflation; added to the HS API 2026-01-29). Documented as a direct 200, but
   // if HS ever 30x-redirects to storage we must NOT forward the Authorization
   // header to the storage host — hence manual redirect + a bare re-fetch.
-  async downloadAttachment(conversationId: number, attachmentId: number): Promise<Buffer> {
+  async downloadAttachment(
+    conversationId: number,
+    attachmentId: number
+  ): Promise<AttachmentDownload> {
     const response = await this.rawRequest(
       'GET',
       `/conversations/${conversationId}/attachments/${attachmentId}/file`,
@@ -1670,10 +1692,11 @@ export class HelpScoutClient {
           redirected.status
         );
       }
-      return Buffer.from(await redirected.arrayBuffer());
+      // Metadata comes off the storage response — the 30x itself carries none.
+      return toAttachmentDownload(redirected);
     }
 
-    return Buffer.from(await response.arrayBuffer());
+    return toAttachmentDownload(response);
   }
 
   // Upload attachment to a thread

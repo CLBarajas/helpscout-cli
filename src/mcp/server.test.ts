@@ -23,6 +23,7 @@ describe('Help Scout MCP server helpers', () => {
       expect.arrayContaining([
         'get_conversation',
         'get_conversation_threads',
+        'download_attachment',
         'update_conversation_status',
         'create_note',
       ])

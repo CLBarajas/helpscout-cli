@@ -172,6 +172,68 @@ describe('HelpScoutClient', () => {
     expect(url).toContain('email=paul%40rogueamoeba.com');
   });
 
+  it('downloads attachment file bytes with response metadata', async () => {
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0xff]);
+    fetchMock.mockResolvedValueOnce(
+      new Response(bytes, {
+        headers: {
+          'Content-Type': 'application/pdf',
+          'Content-Length': String(bytes.length),
+          'Content-Disposition': 'attachment; filename="Invoice-BFFE9E51-0026.pdf"',
+        },
+      })
+    );
+
+    const attachment = await client.downloadAttachment(3361978051, 933302294);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.helpscout.net/v2/conversations/3361978051/attachments/933302294/file',
+      expect.objectContaining({ method: 'GET' })
+    );
+    expect(Array.from(attachment.data)).toEqual(Array.from(bytes));
+    expect(attachment.contentType).toBe('application/pdf');
+    expect(attachment.contentLength).toBe(bytes.length);
+    expect(attachment.contentDisposition).toBe('attachment; filename="Invoice-BFFE9E51-0026.pdf"');
+  });
+
+  it('refreshes auth and retries attachment downloads after 401 responses', async () => {
+    const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ error: 'unauthorized' }, { status: 401 }))
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: 'fresh-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(bytes, { headers: { 'Content-Type': 'application/pdf' } })
+      );
+
+    const attachment = await client.downloadAttachment(3361978051, 933302294);
+
+    expect(Array.from(attachment.data)).toEqual(Array.from(bytes));
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.helpscout.net/v2/conversations/3361978051/attachments/933302294/file'
+    );
+    expect(fetchMock.mock.calls[0][1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer test-token' }),
+      })
+    );
+    expect(fetchMock.mock.calls[1][0]).toBe('https://api.helpscout.net/v2/oauth2/token');
+    expect(fetchMock.mock.calls[2][0]).toBe(
+      'https://api.helpscout.net/v2/conversations/3361978051/attachments/933302294/file'
+    );
+    expect(fetchMock.mock.calls[2][1]).toEqual(
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer fresh-token' }),
+      })
+    );
+  });
+
   it('sends a status patch request', async () => {
     fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
 
@@ -225,9 +287,10 @@ describe('HelpScoutClient', () => {
       })
     );
 
-    const buf = await client.downloadAttachment(123, 456);
+    const result = await client.downloadAttachment(123, 456);
 
-    expect(buf).toEqual(Buffer.from([1, 2, 3, 4]));
+    expect(Array.from(result.data)).toEqual([1, 2, 3, 4]);
+    expect(result.contentType).toBe('image/png');
     expect(fetchMock.mock.calls[0][0]).toBe(
       'https://api.helpscout.net/v2/conversations/123/attachments/456/file'
     );
@@ -244,11 +307,18 @@ describe('HelpScoutClient', () => {
           headers: { Location: 'https://s3.example.com/signed/x.png?sig=abc' },
         })
       )
-      .mockResolvedValueOnce(new Response(new Uint8Array([9, 9]), { status: 200 }));
+      .mockResolvedValueOnce(
+        new Response(new Uint8Array([9, 9]), {
+          status: 200,
+          headers: { 'Content-Type': 'image/png' },
+        })
+      );
 
-    const buf = await client.downloadAttachment(123, 456);
+    const result = await client.downloadAttachment(123, 456);
 
-    expect(buf).toEqual(Buffer.from([9, 9]));
+    expect(Array.from(result.data)).toEqual([9, 9]);
+    // Metadata must come off the storage response — the 302 itself carries none.
+    expect(result.contentType).toBe('image/png');
     expect(fetchMock.mock.calls[1][0]).toBe('https://s3.example.com/signed/x.png?sig=abc');
     expect(fetchMock.mock.calls[1][1]).toBeUndefined();
   });
@@ -944,6 +1014,30 @@ describe('HelpScoutClient', () => {
 
     expect(customer.conversationCount).toBe(10);
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v2/customers/42');
+  });
+
+  it('includes the primary customer when creating a draft reply', async () => {
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ primaryCustomer: { id: 729732479 } }))
+      .mockResolvedValueOnce(new Response(null, { status: 201 }));
+
+    await client.createDraftReply(3401014297, { text: '<p>Draft reply</p>', user: 903917 });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://api.helpscout.net/v2/conversations/3401014297'
+    );
+    expect(fetchMock.mock.calls[1]).toEqual([
+      'https://api.helpscout.net/v2/conversations/3401014297/reply',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({
+          text: '<p>Draft reply</p>',
+          user: 903917,
+          customer: { id: 729732479 },
+          draft: true,
+        }),
+      }),
+    ]);
   });
 
   it('sends private notes with optional status', async () => {

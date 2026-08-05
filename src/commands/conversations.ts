@@ -1,10 +1,16 @@
 import { Command } from 'commander';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { basename, resolve } from 'node:path';
+import { mkdir } from 'node:fs/promises';
+import { basename, dirname, resolve } from 'node:path';
 import { lookup } from 'mime-types';
 import { client } from '../lib/api-client.js';
 import { config } from '../lib/config.js';
 import { HelpScoutCliError, HelpScoutApiError } from '../lib/errors.js';
+import {
+  resolveAttachmentOutputPath,
+  safeAttachmentFilename,
+  writeAttachmentFile,
+} from '../lib/attachment-download.js';
 import { outputJson, htmlToPlainText, buildName } from '../lib/output.js';
 import { withErrorHandling, requireConfirmation, parseIdArg } from '../lib/command-utils.js';
 import { buildDateQuery } from '../lib/dates.js';
@@ -34,6 +40,11 @@ interface ConversationSummary {
 }
 
 const MAX_MESSAGE_LENGTH = 300;
+
+interface DownloadAttachmentOptions {
+  output?: string;
+  force?: boolean;
+}
 
 function truncate(text: string): string {
   if (text.length <= MAX_MESSAGE_LENGTH) return text;
@@ -714,10 +725,15 @@ export function createConversationsCommand(): Command {
     .description('Download an attachment')
     .argument('<conversationId>', 'Conversation ID')
     .argument('<attachmentId>', 'Attachment ID')
-    .option('-o, --output <path>', 'Output file path (defaults to attachment filename)')
+    .option('-o, --output <path>', 'Output file or directory (defaults to attachment filename)')
+    .option('-f, --force', 'Overwrite existing output file')
     .action(
       withErrorHandling(
-        async (conversationId: string, attachmentId: string, options: { output?: string }) => {
+        async (
+          conversationId: string,
+          attachmentId: string,
+          options: DownloadAttachmentOptions
+        ) => {
           const convId = parseIdArg(conversationId, 'conversation');
           const attId = parseIdArg(attachmentId, 'attachment');
 
@@ -727,29 +743,33 @@ export function createConversationsCommand(): Command {
 
           // Prefer the streaming /file endpoint (raw bytes, no inflation); fall
           // back to the legacy base64 /data endpoint if streaming is unavailable.
-          let buffer: Buffer;
+          let data: Uint8Array;
           let method: 'stream' | 'base64-fallback';
           try {
-            buffer = await client.downloadAttachment(convId, attId);
+            ({ data } = await client.downloadAttachment(convId, attId));
             method = 'stream';
           } catch (err) {
             const status = err instanceof HelpScoutApiError ? err.statusCode : undefined;
             if (status !== 404 && status !== 410) {
               throw err;
             }
-            const data = await client.getAttachmentData(convId, attId);
-            buffer = Buffer.from(data.data, 'base64');
+            const fallback = await client.getAttachmentData(convId, attId);
+            data = Buffer.from(fallback.data, 'base64');
             method = 'base64-fallback';
           }
 
-          const outputPath = options.output || attachment?.filename || `attachment-${attId}`;
-          const resolvedPath = resolve(outputPath);
-          writeFileSync(resolvedPath, buffer);
+          // Filename comes from the attachment record, not Content-Disposition —
+          // listConversationAttachments always has it, the header often does not.
+          const filename = safeAttachmentFilename(attachment?.filename, attId);
+          const resolvedPath = await resolveAttachmentOutputPath(options.output, filename);
+
+          await mkdir(dirname(resolvedPath), { recursive: true });
+          await writeAttachmentFile(resolvedPath, data, options.force);
 
           outputJson({
             message: 'Attachment downloaded',
             path: resolvedPath,
-            size: buffer.length,
+            size: data.byteLength,
             filename: attachment?.filename,
             method,
           });

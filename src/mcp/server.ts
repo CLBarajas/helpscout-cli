@@ -3,6 +3,7 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { client } from '../lib/api-client.js';
 import { auth } from '../lib/auth.js';
+import { downloadAttachmentToFile } from '../lib/attachment-download.js';
 import { normalizeConversationStatus } from '../lib/conversation-status.js';
 import { buildDateQuery } from '../lib/dates.js';
 import { normalizeSearchQuery } from '../lib/search.js';
@@ -503,6 +504,16 @@ const conversationThreadsOutputSchema = z.object({
   filtered_types: z.array(z.string()).optional(),
 });
 
+const attachmentDownloadOutputSchema = z.object({
+  message: z.literal('Attachment downloaded'),
+  conversationId: z.number(),
+  attachmentId: z.number(),
+  filename: z.string(),
+  path: z.string(),
+  bytes: z.number(),
+  contentType: z.string().optional(),
+});
+
 const searchConversationsOutputSchema = z.object({
   conversations: z.array(conversationSchema),
   total_results: z.number().optional(),
@@ -611,6 +622,13 @@ const MUTATING_REMOTE_ANNOTATIONS = {
 const DESTRUCTIVE_REMOTE_ANNOTATIONS = {
   readOnlyHint: false,
   destructiveHint: true,
+  idempotentHint: false,
+  openWorldHint: true,
+};
+
+const MUTATING_LOCAL_REMOTE_ANNOTATIONS = {
+  readOnlyHint: false,
+  destructiveHint: false,
   idempotentHint: false,
   openWorldHint: true,
 };
@@ -1023,6 +1041,44 @@ server.registerTool(
         ),
       ]
     );
+  }
+);
+
+rememberTool(
+  'download_attachment',
+  'Download a conversation attachment from Help Scout to a local file. Fails if the file exists unless force is true.'
+);
+server.registerTool(
+  'download_attachment',
+  {
+    title: 'Download Attachment',
+    description:
+      'Download a conversation attachment from Help Scout to a local file. If outputPath is omitted, saves to the attachment filename in the current working directory. If outputPath is an existing directory or ends with a path separator, saves into that directory using the attachment filename. Fails if the file exists unless force is true.',
+    inputSchema: {
+      conversationId: conversationRefSchema,
+      attachmentId: z.number().int().positive().describe('Help Scout attachment ID'),
+      outputPath: z
+        .string()
+        .optional()
+        .describe(
+          'Optional destination file or directory path. Directories use the attachment filename.'
+        ),
+      force: z
+        .boolean()
+        .optional()
+        .default(false)
+        .describe('Overwrite the destination file if it already exists'),
+    },
+    outputSchema: attachmentDownloadOutputSchema,
+    annotations: MUTATING_LOCAL_REMOTE_ANNOTATIONS,
+  },
+  async ({ conversationId: conversationRef, attachmentId, outputPath, force = false }) => {
+    const result = await downloadAttachmentToFile(String(conversationRef), String(attachmentId), {
+      output: outputPath,
+      force,
+    });
+
+    return structuredJsonResult({ ...result });
   }
 );
 
