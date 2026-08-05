@@ -682,6 +682,21 @@ export function getServerToolNamesForTesting(): string[] {
 }
 
 /**
+ * Declared input-param names for one tool, read from the same internal registry.
+ * Used by the test that locks the "declared surface is narrower than what the
+ * client method accepts" defect: a filter the API supports but the tool never
+ * exposes is not a missing feature, it is a silent wrong answer — the caller
+ * asks for a scoped result, cannot express the scope, and gets an unscoped one
+ * reported as success.
+ */
+export function getToolInputKeysForTesting(name: string): string[] {
+  const internal = server as unknown as {
+    _registeredTools: Record<string, { inputSchema?: { shape?: Record<string, unknown> } }>;
+  };
+  return Object.keys(internal._registeredTools[name]?.inputSchema?.shape ?? {});
+}
+
+/**
  * Conversation-returning output schemas, exposed so tests can validate them
  * against realistic Help Scout list/search embed payloads (which omit
  * customFields[].type — see customFieldSchema).
@@ -1091,7 +1106,7 @@ server.registerTool(
   {
     title: 'Search Conversations',
     description:
-      'Search conversations matching a query, across all result pages. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. Use assignedTo (a user id) to fetch every conversation assigned to someone — it filters server-side and composes with status. WARNING: Compound query-string filters are unreliable — use one filter per call.',
+      'Search conversations matching a query, across all result pages. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. assignedTo (a user id), mailbox, and tag all filter server-side and compose with status — prefer them over encoding the same filter into `query`. WARNING: Compound query-string filters are unreliable — use one filter per call.',
     inputSchema: {
       query: z
         .string()
@@ -1109,6 +1124,11 @@ server.registerTool(
         .describe(
           'User ID to filter by assignee (server-side, across all pages). Get the id from list_users.'
         ),
+      mailbox: z
+        .string()
+        .optional()
+        .describe('Mailbox ID to scope the search to (server-side). Get the id from list_mailboxes.'),
+      tag: z.string().optional().describe('Tag name to filter by (server-side).'),
       maxResults: z
         .number()
         .optional()
@@ -1125,6 +1145,8 @@ server.registerTool(
     query,
     status = 'all',
     assignedTo,
+    mailbox,
+    tag,
     maxResults,
     createdSince,
     createdBefore,
@@ -1137,7 +1159,7 @@ server.registerTool(
       normalizedQuery
     );
     const all = await client.listAllConversations(
-      { query: dateQuery, status, assignedTo },
+      { query: dateQuery, status, assignedTo, mailbox, tag },
       maxResults
     );
     return structuredJsonResult(withOmissionMeta(all, maxResults));
@@ -1161,6 +1183,12 @@ server.registerTool(
         .describe('Status filter'),
       mailbox: z.string().optional().describe('Mailbox ID to filter by'),
       tag: z.string().optional().describe('Tag to filter by'),
+      assignedTo: z
+        .string()
+        .optional()
+        .describe(
+          'User ID to filter by assignee (server-side). Get the id from list_users.'
+        ),
       maxResults: z
         .number()
         .optional()
@@ -1175,6 +1203,7 @@ server.registerTool(
     status,
     mailbox,
     tag,
+    assignedTo,
     maxResults,
     createdSince,
     createdBefore,
@@ -1188,7 +1217,7 @@ server.registerTool(
       modifiedBefore,
     });
     const conversations = await client.listAllConversations(
-      { status, mailbox, tag, query: dateQuery },
+      { status, mailbox, tag, assignedTo, query: dateQuery },
       maxResults
     );
     return structuredJsonResult(summarizeConversations(conversations));
@@ -1318,13 +1347,17 @@ server.registerTool(
       query: z.string().optional().describe('Search query'),
       firstName: z.string().optional().describe('Filter by first name'),
       lastName: z.string().optional().describe('Filter by last name'),
+      mailbox: z
+        .string()
+        .optional()
+        .describe('Mailbox ID to scope results to. Get the id from list_mailboxes.'),
       page: z.number().optional().describe('Page number'),
     },
     outputSchema: listCustomersOutputSchema,
     annotations: READ_ONLY_REMOTE_ANNOTATIONS,
   },
-  async ({ query, firstName, lastName, page }) => {
-    const result = await client.listCustomers({ query, firstName, lastName, page });
+  async ({ query, firstName, lastName, mailbox, page }) => {
+    const result = await client.listCustomers({ query, firstName, lastName, mailbox, page });
     return structuredJsonResult({
       customers: result.customers.map(cleanCustomer),
       page: result.page,
@@ -2637,6 +2670,11 @@ server.registerTool(
         .enum(['active', 'pending', 'closed', 'spam', 'all'])
         .optional()
         .describe('Status filter (defaults to "all")'),
+      mailbox: z
+        .string()
+        .optional()
+        .describe('Mailbox ID to scope the search to (server-side). Get the id from list_mailboxes.'),
+      tag: z.string().optional().describe('Tag name to filter by (server-side).'),
       maxResults: z
         .number()
         .optional()
@@ -2650,6 +2688,8 @@ server.registerTool(
   async ({
     email,
     status = 'all',
+    mailbox,
+    tag,
     maxResults,
     createdSince,
     createdBefore,
@@ -2660,7 +2700,12 @@ server.registerTool(
     const dateFilters = { createdSince, createdBefore, modifiedSince, modifiedBefore };
 
     const emailQuery = buildDateQuery(dateFilters, `email:${email}`);
-    const emailSearch = client.listAllConversations({ query: emailQuery, status }, maxResults);
+    // Both legs take the same scope filters — filtering only one would make a
+    // mailbox/tag-scoped search return unscoped domain hits alongside scoped ones.
+    const emailSearch = client.listAllConversations(
+      { query: emailQuery, status, mailbox, tag },
+      maxResults
+    );
 
     const isGenericDomain = GENERIC_EMAIL_DOMAINS.has(domain);
     const domainSearch = isGenericDomain
@@ -2669,6 +2714,8 @@ server.registerTool(
           {
             query: buildDateQuery(dateFilters, `@${domain}`),
             status,
+            mailbox,
+            tag,
           },
           maxResults
         );

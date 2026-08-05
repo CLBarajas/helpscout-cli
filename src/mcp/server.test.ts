@@ -120,4 +120,26 @@ describe('Help Scout MCP server helpers', () => {
     const rememberedNotServed = [...remembered].filter((name) => !servedSet.has(name));
     expect(rememberedNotServed).toEqual([]);
   });
+
+  // Locks the "narrower declared surface" defect. listAllConversations accepts
+  // mailbox/tag/assignedTo and listCustomers accepts mailbox, but these tools
+  // did not declare them — so a caller could not scope the request, and got an
+  // UNSCOPED result reported as success. search_conversations was the sharp
+  // case: it is the documented way to page through everything, yet without
+  // `mailbox` it could only ever surface the highest-volume mailbox. Verified
+  // live: mailbox "164714" returned 60/60 from that mailbox, while the same
+  // search without it returned 60/60 from a different one.
+  //
+  // These are floors, not exact shapes — adding params is fine, dropping one
+  // silently reintroduces the defect.
+  it.each([
+    ['search_conversations', ['status', 'assignedTo', 'mailbox', 'tag']],
+    ['get_conversations_summary', ['status', 'mailbox', 'tag', 'assignedTo']],
+    ['search_by_customer', ['email', 'status', 'mailbox', 'tag']],
+    ['list_customers', ['query', 'firstName', 'lastName', 'mailbox']],
+  ])('%s declares the scope filters its client method supports', (tool, expected) => {
+    expect(mcpServer.getToolInputKeysForTesting(tool)).toEqual(
+      expect.arrayContaining(expected)
+    );
+  });
 });
