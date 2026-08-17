@@ -1,5 +1,6 @@
 import { McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { z } from 'zod';
 import { client } from '../lib/api-client.js';
 import { auth } from '../lib/auth.js';
@@ -679,6 +680,23 @@ export function getRegisteredToolsForTesting() {
 export function getServerToolNamesForTesting(): string[] {
   const internal = server as unknown as { _registeredTools: Record<string, unknown> };
   return Object.keys(internal._registeredTools);
+}
+
+/**
+ * The zod output schema of every tool that declares one, read from the same
+ * internal registry. Used by the test that proves relabelling the JSON Schema
+ * dialect (see retargetSchemaDialect) is lossless for the schemas we actually
+ * ship, rather than assuming it.
+ */
+export function getRegisteredOutputSchemasForTesting(): Record<string, unknown> {
+  const internal = server as unknown as {
+    _registeredTools: Record<string, { outputSchema?: unknown }>;
+  };
+  const schemas: Record<string, unknown> = {};
+  for (const [name, tool] of Object.entries(internal._registeredTools)) {
+    if (tool.outputSchema) schemas[name] = tool.outputSchema;
+  }
+  return schemas;
 }
 
 /**
@@ -3369,7 +3387,57 @@ for (const tool of DOCS_WRITE_TOOLS) {
   );
 }
 
-export async function runMcpServer() {
-  const transport = new StdioServerTransport();
+/** The only JSON Schema dialect MCP hosts are required to validate against. */
+const JSON_SCHEMA_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
+
+/**
+ * Rewrite the JSON Schema dialect on every schema in a tools/list result.
+ *
+ * The SDK converts our zod schemas without ever passing a target
+ * (`server/mcp.js` calls `toJsonSchemaCompat(obj, { strictUnions, pipeStrategy })`,
+ * and `server/zod-json-schema-compat.js` maps a missing target to `'draft-7'`),
+ * so under zod 4 every schema goes out labelled draft-07. Hosts validate
+ * `outputSchema` with a 2020-12-only validator and reject the *whole tool* at
+ * registration time — not the data — which silently removes all 21 tools that
+ * declare one. `inputSchema` is mislabelled the same way and only survives
+ * because hosts don't currently validate it.
+ *
+ * `registerTool` exposes no target option and rejects pre-built JSON Schema
+ * ("must be a Zod schema or raw shape"), so the dialect cannot be set at the
+ * declaration site; SDK 1.30.0 has the identical defect, so upgrading is not a
+ * fix either. Relabelling is sound because zod emits byte-identical bodies for
+ * both targets across the constructs we use — a property the test suite locks,
+ * so a future schema that would actually convert differently fails loudly
+ * instead of shipping a mislabelled dialect.
+ */
+export function retargetSchemaDialect<T>(message: T): T {
+  const tools = (message as { result?: { tools?: unknown } } | null)?.result?.tools;
+  if (!Array.isArray(tools)) return message;
+
+  for (const tool of tools) {
+    if (!tool || typeof tool !== 'object') continue;
+    for (const key of ['inputSchema', 'outputSchema'] as const) {
+      const schema = (tool as Record<string, unknown>)[key];
+      if (schema && typeof schema === 'object' && '$schema' in schema) {
+        (schema as Record<string, unknown>).$schema = JSON_SCHEMA_2020_12;
+      }
+    }
+  }
+
+  return message;
+}
+
+/**
+ * Connect the server with the dialect fix applied to everything it sends.
+ * Shared by the stdio entry point and the tests, so the tests exercise the
+ * same emission path the MCP host sees rather than a reimplementation of it.
+ */
+export async function connectMcpServer(transport: Transport) {
+  const send = transport.send.bind(transport);
+  transport.send = (message, options) => send(retargetSchemaDialect(message), options);
   await server.connect(transport);
+}
+
+export async function runMcpServer() {
+  await connectMcpServer(new StdioServerTransport());
 }

@@ -143,3 +143,79 @@ describe('Help Scout MCP server helpers', () => {
     );
   });
 });
+
+// Locks the JSON Schema dialect regression that zod 4 introduced with the
+// upstream v2.17.1 merge. The SDK converts our schemas without passing a
+// target, so zod 4 labelled every one draft-07; MCP hosts validate outputSchema
+// with a 2020-12-only validator and reject the whole tool at registration time,
+// which took out all 21 tools declaring one ("Tool 'search_conversations' has
+// an invalid outputSchema: JSON Schema declares an unsupported dialect").
+// A rebuild does not fix this — it is an emission defect, not stale output.
+describe('emitted JSON Schema dialect', () => {
+  const DIALECT_2020_12 = 'https://json-schema.org/draft/2020-12/schema';
+
+  // Drives the real SDK emission path over an in-memory transport, so this
+  // asserts what an MCP host actually receives rather than a reimplementation.
+  async function listToolsOverTransport() {
+    const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+    const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js');
+
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'dialect-test', version: '0' });
+
+    await Promise.all([
+      mcpServer.connectMcpServer(serverTransport),
+      client.connect(clientTransport),
+    ]);
+
+    const { tools } = await client.listTools();
+    await client.close();
+    return tools;
+  }
+
+  it('labels every emitted schema 2020-12, the only dialect hosts must support', async () => {
+    const tools = await listToolsOverTransport();
+
+    const withOutput = tools.filter((tool) => tool.outputSchema);
+    // Guards against passing vacuously if the schemas are ever dropped instead
+    // of fixed — the failure this regression would otherwise be "resolved" by.
+    expect(withOutput.length).toBeGreaterThanOrEqual(21);
+
+    const dialects = new Set<unknown>();
+    for (const tool of tools) {
+      for (const schema of [tool.inputSchema, tool.outputSchema]) {
+        if (schema && '$schema' in schema) dialects.add(schema.$schema);
+      }
+    }
+
+    expect([...dialects]).toEqual([DIALECT_2020_12]);
+  });
+
+  // The fix relabels the dialect rather than re-converting, which is only sound
+  // while zod emits identical bodies for both targets. If a schema ever uses a
+  // construct that genuinely differs (tuple `items` -> `prefixItems`, boolean
+  // `exclusiveMinimum`, `definitions` -> `$defs`), this fails and the fix must
+  // become a real re-conversion instead of a label change.
+  it('emits identical bodies under both targets, so relabelling stays lossless', async () => {
+    const z4mini = await import('zod/v4-mini');
+    const schemas = mcpServer.getRegisteredOutputSchemasForTesting();
+
+    expect(Object.keys(schemas).length).toBeGreaterThanOrEqual(21);
+
+    for (const [name, schema] of Object.entries(schemas)) {
+      const convert = (target: 'draft-7' | 'draft-2020-12') => {
+        // biome-ignore lint/suspicious/noExplicitAny: SDK-internal zod schema
+        const { $schema, ...body } = z4mini.toJSONSchema(schema as any, {
+          target,
+          io: 'output',
+        }) as Record<string, unknown>;
+        void $schema;
+        return body;
+      };
+
+      expect(convert('draft-2020-12'), `${name} differs between targets`).toEqual(
+        convert('draft-7')
+      );
+    }
+  });
+});

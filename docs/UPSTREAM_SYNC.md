@@ -81,6 +81,22 @@ test would have caught them. Check for recurrences on every future sync:
    `src/cli.ts` builds commands at module scope, the merged binary would have died on **every**
    invocation including `helpscout mcp`. `src/commands/conversations.test.ts` is now rewritten
    to pin our flat shape so this cannot return silently.
+3. **zod 4 flipped the emitted JSON Schema dialect, unregistering 21 MCP tools** (found live
+   2026-08-17, twelve days after the merge passed its gates). Every tool declaring an
+   `outputSchema` was rejected by the host at *registration* — "declares an unsupported dialect
+   (draft-07); the default validator supports JSON Schema 2020-12 only" — so the tool disappeared
+   rather than returning an error. **No local gate could see this**: the schemas are valid, the
+   build is clean, and the rejection happens in the *host*, so only an actual MCP client catches
+   it. The cause is the SDK, not zod: `server/mcp.js` converts via
+   `toJsonSchemaCompat(obj, { strictUnions, pipeStrategy })` without ever passing a `target`, and
+   `server/zod-json-schema-compat.js` maps a missing target to `'draft-7'`. zod 3 went through a
+   different converter, so the merge merely exposed a latent SDK default. **`@modelcontextprotocol/sdk`
+   1.30.0 is identical, so an upgrade is not the remedy**, and `registerTool` neither accepts a
+   target nor a pre-built JSON Schema. Resolved by `retargetSchemaDialect()` in `src/mcp/server.ts`,
+   applied through a `transport.send` wrapper in `connectMcpServer()`. `inputSchema` was mislabelled
+   the same way and is now relabelled too — it survived only because hosts don't validate it.
+   `src/mcp/server.test.ts` locks both the emitted dialect (end-to-end over an in-memory transport)
+   and the equivalence that makes relabelling — rather than re-converting — sound.
 
 ## Watch list (convergence / messy future merges)
 
@@ -135,3 +151,13 @@ test would have caught them. Check for recurrences on every future sync:
 `bun run typecheck && bun run lint && bun run test` → `bun run build` (+ `bun link` if the
 global binary changed). MCP changes additionally need a Claude Code session restart to take
 effect. Update the outboard `TESTING.md` (`context/tools/`) when commands change.
+
+`bun run format:check` is **not** part of this gate and currently reports 11 pre-existing errors
+across 11 files on a clean tree — the repo has never been biome-formatted. Compare counts before
+and after a change rather than reading a non-zero exit as your own regression.
+
+**These gates cannot see host-side tool rejection.** Hazard 3 above passed typecheck, lint, tests,
+and build while 21 MCP tools were unusable, because the host — not the server — rejects a tool
+whose schema dialect it won't validate. After any change touching schemas, the SDK version, or
+zod, drive `tools/list` over a real transport and check what the host actually receives;
+`src/mcp/server.test.ts` does exactly this over an in-memory transport and is the cheapest proxy.
