@@ -10,21 +10,22 @@ place to rot instead of several.
 - **Issue-level detail (open upstream issues + fork-side state):** [`UPSTREAM_ISSUES_PLAN.md`](UPSTREAM_ISSUES_PLAN.md)
 - **Tool inventory / API coverage (source of truth):** [`API_COVERAGE.md`](API_COVERAGE.md)
 
-## Current state (verified 2026-08-19)
+## Current state (verified 2026-08-19, post-2.18.3-merge)
 
 | | |
 |---|---|
-| Fork HEAD | `fa8f59b` — **on branch `merge/upstream-2.17.1`, not yet on `main`** (7 commits: the v2.17.1 merge + `eef175b` scope filters + `111dedd` schema dialect + `fa8f59b` subject-less conversations) |
-| `main` | still `ad6f9bb`; lands via `git merge --ff-only merge/upstream-2.17.1` |
-| `package.json` version | `2.17.1` (tracks upstream's number; cosmetic) |
-| vs `upstream/main` (`dd4b7a5`, tag `v2.18.3`) | **4 behind, 78 ahead** on the merge branch — upstream shipped v2.18.0–v2.18.3 on 8/12–8/13; see "Pending upstream" |
-| Push state | `main` is **1 ahead of `origin/main`** (`ad6f9bb` unpushed) and the merge branch is local-only — **Chris pushes manually; never push without his say-so** |
-| Rollback | tag `pre-upstream-2.17.1` + branch `backup/pre-merge-2.17.1`, both at `ad6f9bb`. These are the *only* rollback points — `ad6f9bb` is not on the remote. |
+| Fork HEAD | `e5975fc` — **on branch `merge/upstream-2.18.3`, not yet on `main`** (the v2.18.3 merge; 5 commits ahead of `main`) |
+| `main` | **`caea65e`** — the v2.17.1 line LANDED 2026-08-19 via `git merge --ff-only merge/upstream-2.17.1` (banked `eef175b` scope filters, `111dedd` schema dialect, `fa8f59b` subject-less conversations). The 2.18.3 branch lands the same way: `git merge --ff-only merge/upstream-2.18.3`. |
+| `package.json` version | `2.18.3` (tracks upstream's number; cosmetic) |
+| vs `upstream/main` (`dd4b7a5`, tag `v2.18.3`) | **0 behind, 80 ahead** on `merge/upstream-2.18.3` |
+| Push state | `main` is **16 ahead of `origin/main`** and `merge/upstream-2.18.3` is local-only — **Chris pushes manually; never push without his say-so** |
+| Rollback | tag `pre-upstream-2.18.3` + branch `backup/pre-merge-2.18.3`, both at `caea65e` (pre-2.18.3 `main`). Older: tag `pre-upstream-2.17.1` + branch `backup/pre-merge-2.17.1` at `ad6f9bb`. These are the *only* rollback points — none of this is on the remote. |
 
 ## Merge history (recent)
 
 | Merged | Upstream point | Fork commit | Notes |
 |--------|----------------|-------------|-------|
+| 2026-08-19 | `upstream/main` @ `dd4b7a5` (tag `v2.18.3`) | `e5975fc` | All 4 commits taken. **ADOPTED #64/#65** (draft lifecycle: list/update/upsert + normalized post-write verification). **KEPT FORK for #66/#67** — upstream independently reimplemented the fork's `assigned_to` fix and its query-wire-contract idea; ours is broader (reusable per-endpoint specs + off-spec drop-and-warn), and upstream's 3 assignee tests were adopted anyway and pass against it. 11 conflict hunks / 6 files. Resolving `api-client.ts` hunk 5 as ours also removed a duplicate `listUsers` (hazard 1 recurrence). Gates: typecheck 0, lint 0, **158/158** (was 130), build OK. Beyond gates: real-stdio `tools/list` = 172 tools, all 2020-12, registered tools **110 -> 113 with zero lost**; live-verified subject-less search, the `assignedTo` filter, and `list_draft_replies`. |
 | 2026-08-05 | `upstream/main` @ `6d0f577` (tag `v2.17.1`) | `b6eca0a` (+ `c0f673e`) | All 7 commits taken. **zod 3.25.76 → 4.4.3** and **TypeScript 6 → 7** both land here; TS 7 split into its own commit (`c0f673e`) so a red typecheck would have one cause. Draft-reply customer fix closes our own #48. Attachment download adopted (see below). Gates: typecheck 0, lint 0, **123/123** tests (was 110), build OK. Conflicts: bun.lock (regenerated), package.json (hand-assembled), `conversations.ts`, `api-client.test.ts`, `mcp/server.ts`. **Two files merged *silently* and needed hand-fixing — see "Merge hazards proven real" below.** |
 | 2026-07-08 | `upstream/main` @ `dc1b7a6` (#58 dep bumps) | `bfe0d84` | commander 15 + html-to-text 10 + TS 6 adopted (typecheck / 89 tests / build all green); zod held at 3.x by upstream itself; kept fork's `mime-types`. Conflicts: package.json (adjacent adds) + bun.lock (regenerated) |
 | 2026-06-23 | `upstream/main` @ `38901b2` (v2.16.1 + #51) | `09a8606` | #50 output-schema passthrough + #51 CI bump |
@@ -33,31 +34,28 @@ place to rot instead of several.
 
 ## Pending upstream (newer than what we've merged)
 
-**4 commits, verified 2026-08-19** — `merge/upstream-2.17.1..upstream/main`. Upstream cut four
-releases in two days (v2.18.0–v2.18.3, 8/12–8/13) and **two of them are upstream independently
-reimplementing fork features**, which is the documented `#47` convergence pattern arriving again.
+*(nothing — `upstream/main` @ `dd4b7a5` (tag `v2.18.3`) is fully merged as of 2026-08-19)*
 
-| Upstream | What | Fork stance (pre-decided) |
-|---|---|---|
-| `4376087` #64 v2.18.0 | `feat(drafts): prevent duplicate Help Scout replies` — adds `listDraftReplies` / `updateDraftReply` / `upsertDraftReply` / `verifyDraftReply`, in-place draft updates and ambiguity-safe upserts, preserving the never-send boundary | **ADOPT — real functional gain, fork has no equivalent.** Fork has only `createDraftReply` / `createDraftConversation` (blind create, no listing, no update). |
-| `8efdb3f` #65 v2.18.1 | `fix(drafts): verify normalized reply bodies` — post-write verification compares via new `normalizeBodyText()` (HTML + whitespace normalized) instead of raw equality; `isDraftReply` also requires `status: 'active'` | **ADOPT — rides with #64.** |
-| `3d22f99` #66 v2.18.2 | `fix(conversations): honor assignee filters` — serializes `assignedTo` as the `assigned_to` wire key | **KEEP FORK.** This *is* the fork's 2026-07-14 fix, reimplemented. Ours is broader (module-level spec + dev warning + the workflows `mailbox`→`mailboxId` case + `search_conversations` assignee support). |
-| `dd4b7a5` #67 v2.18.3 | `refactor(api): make query wire contracts explicit` — enumerates wire keys inline at each call site (conversations, customers, users, tags, mailboxes, workflows) | **KEEP FORK.** Same idea as our `src/lib/query-params.ts`, implemented inline rather than as reusable per-endpoint specs, and with no unknown-key drop-and-warn. Upstream *did* converge on `mailbox`→`mailboxId` for workflows. |
+### What the v2.18.x round taught us — the convergence pattern is now the norm
 
-**Conflict surface, measured 2026-08-19** via `git merge-tree --write-tree --name-only merge/upstream-2.17.1 upstream/main`
-(non-destructive dry run): **6 conflicting files** — `README.md`, `src/lib/api-client.ts`,
-`src/lib/api-client.test.ts`, `src/mcp/server.ts`, `src/mcp/server.test.ts`,
-`src/commands/conversations.test.ts`. This is a real merge session, not a tack-on.
+Two of those four commits (#66, #67) were upstream **independently arriving at fixes the fork
+already had**, with no issue filed by us on either. Combined with the #47 precedent, treat this
+as expected rather than surprising: the closer upstream gets to the fork's surface, the more
+each sync becomes *reconciling two implementations of the same idea* rather than importing new
+code. The wholesale-merge stance handles it — resolve toward the broader implementation — but
+budget for it: **the conflict count now tracks feature overlap, not upstream's diff size.**
+Upstream's tests for a reimplemented feature are still worth adopting: all three of #66's
+assignee tests pass unmodified against the fork's own `buildWireParams` implementation, which is
+free extra coverage and an early-warning tripwire if the two designs ever diverge.
 
-⚠️ **Two files auto-merge with NO conflict markers and must still be hand-checked** — the exact
-hazard class proven real on 8/05 (see "Merge hazards proven real"): `src/commands/conversations.ts`
-(hazard 2 — a duplicate command name makes Commander 15 *throw at module scope*, killing every
-invocation including `helpscout mcp`) and `src/types/index.ts` (upstream adds `DraftReply` types).
+### Still owed on the merged surface
 
-**Sequencing note:** the owed **×2 user-attribution fix** (`create_draft_reply` +
-`create_draft_conversation` MCP handlers never pass `user`, so drafts are attributed to the OAuth
-app identity rather than the acting user) lands in code that **#64 rewrites**. Apply it *into* the
-post-merge draft surface, not before, or it gets redone.
+The **user-attribution fix is ×3, not ×2** (re-scoped 2026-08-19 after the merge): the MCP
+handlers for `create_draft_reply`, `create_draft_conversation`, **and now `upsert_draft_reply`**
+never pass `user`, so drafts are attributed to the OAuth app identity rather than the acting
+user. The client layer supports it on all three (`createDraftReply`/`createDraftConversation`
+take `user?: number`; `upsertDraftReply` forwards it to create). `updateDraftReply` is correctly
+excluded — it PATCHes text on an existing thread, and attribution is fixed at creation.
 
 Unmerged upstream **branches** exist but none are on `main`, so a wholesale merge ignores them:
 `chore/zod-v4-compat-pin`, `chore/typescript-7-lockfile`, `feat/attachment-download`,
@@ -121,6 +119,25 @@ test would have caught them. Check for recurrences on every future sync:
    the same way and is now relabelled too — it survived only because hosts don't validate it.
    `src/mcp/server.test.ts` locks both the emitted dialect (end-to-end over an in-memory transport)
    and the equivalence that makes relabelling — rather than re-converting — sound.
+
+### Recurrence check, 2026-08-19 (v2.18.3 merge)
+
+- **Hazard 1 RECURRED, in a new disguise.** Upstream's `listUsers` (rewritten by #67) collided
+  with the fork's, but *not* as a clean either/or: git aligned the fork's large customer
+  sub-resource block against upstream's `listUsers` in one hunk, so resolving that hunk "ours"
+  was what removed the duplicate. Taking "theirs" — or naively unioning — would have produced
+  two `listUsers` in one class. **Only `bun run typecheck` catches this**, exactly as in 2026-08-05.
+- **Hazard 2 did NOT recur.** `conversations.ts` auto-merged (+78) and upstream's new
+  `draft-replies` group does repeat the names `create`/`list`/`update` — but as children of a
+  *nested* `new Command('draft-replies')`, not siblings of the top-level ones, so Commander 15
+  does not throw. Confirmed structurally and by running the built binary. The fork's flat
+  `attachment-*` commands and upstream's `attachments` leaf still coexist.
+- **Hazard 3 held.** `retargetSchemaDialect()` survived; a real-stdio `tools/list` reports all
+  172 tools at 2020-12, with 24 declaring an `outputSchema` (21 before, +3 draft tools).
+- **New check worth keeping: diff the registered-tool name sets across the merge.**
+  `git show <pre>:src/mcp/server.ts` vs the merged file, extracting
+  `server.registerTool('<name>'`, proved 110 -> 113 with **zero lost**. Cheap, and the only
+  direct evidence that a conflict resolution in a 2,000-line tool file dropped nothing.
 
 ## Watch list (convergence / messy future merges)
 

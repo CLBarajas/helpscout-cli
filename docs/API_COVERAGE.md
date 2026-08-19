@@ -20,6 +20,17 @@ Legend: ✅ covered · ◑ partial · ⬜ not yet · ⏸ parked (intentional)
     `get_conversations_summary`; `mailbox` added to `list_customers`. Parity is now real and
     locked by a test in `src/mcp/server.test.ts`.
 - Threads: ✅ list (+`--v3`), note, draft-reply, update-thread, **add-customer/chat/phone-thread**, **thread-source (+`--rfc822`)**
+- Draft replies: ✅ **full lifecycle (adopted from upstream #64/#65, 2026-08-19)** — CLI
+  `conversations draft-replies list|create|update|upsert`; MCP `list_draft_replies`,
+  `create_draft_reply`, `update_draft_reply`, `upsert_draft_reply`. Creates parse the
+  `Resource-ID` header and **verify the written draft** by re-reading the thread, comparing
+  bodies after HTML/whitespace normalization. `upsert` updates the sole active draft, creates
+  when none exists, and **refuses (409) when several are active** rather than guessing. Only
+  threads that are `type: message`, `state: draft`, `status: active` qualify, so the never-send
+  boundary holds. Creation still carries the fork's primary-customer resolution (our upstream
+  issue #48). ⚠️ **Owed:** the ×3 user-attribution gap — `create_draft_reply`,
+  `create_draft_conversation`, and `upsert_draft_reply` accept `user` at the client layer but the
+  MCP handlers never pass it, so drafts are attributed to the OAuth app identity.
 - Threads scheduling: ✅ **schedule-thread / publish-schedule / unschedule-thread**
 - ✅ attachments: list, attachment-download (via `/file` with base64 fallback on 404/410; note
   neither leg actually streams — both buffer via `arrayBuffer()`, the win is escaping the base64
