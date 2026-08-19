@@ -337,20 +337,30 @@ async function toAttachmentDownload(response: Response): Promise<AttachmentDownl
 
 const DRAFT_PREVIEW_LENGTH = 300;
 
+// `state` is the thread-lifecycle field ('draft' vs 'published'); `status` is NOT.
+// Upstream's #65 additionally required status === 'active', but Help Scout stamps a
+// thread's `status` with the CONVERSATION's status at the moment the thread is created,
+// so it is neither a draft-lifecycle field nor stable within one conversation. Verified
+// live 2026-08-19: conversation 3374803075 carries `type: message` threads at BOTH
+// status 'closed' and status 'active', and every agent reply on 3194119012 is 'closed'
+// (10/10 sampled). The fork's own threadSchema comment says as much — status is optional
+// and absent on some thread types.
+//
+// Keeping upstream's clause would have broken the fork's normal workflow: a draft written
+// on a pending or closed conversation gets that status, so listDraftReplies would hide it
+// and verifyDraftReply would throw 502 "post-write verification failed" for a draft that
+// WAS created — inviting exactly the duplicate replies #64 exists to prevent.
 function isDraftReply(
   thread: Thread
-): thread is Thread & { type: 'message'; state: 'draft'; status: 'active'; body: string } {
+): thread is Thread & { type: 'message'; state: 'draft'; body: string } {
   return (
-    thread.type === 'message' &&
-    thread.state === 'draft' &&
-    thread.status === 'active' &&
-    typeof thread.body === 'string'
+    thread.type === 'message' && thread.state === 'draft' && typeof thread.body === 'string'
   );
 }
 
 function toDraftReply(
   conversationId: number,
-  thread: Thread & { type: 'message'; state: 'draft'; status: 'active'; body: string }
+  thread: Thread & { type: 'message'; state: 'draft'; body: string }
 ): DraftReply {
   const preview =
     thread.body.length > DRAFT_PREVIEW_LENGTH

@@ -1224,7 +1224,11 @@ describe('HelpScoutClient', () => {
     );
   });
 
-  it('lists only active draft reply threads with safe selection metadata', async () => {
+  // Upstream's version of this test asserted a draft with status 'pending' was excluded.
+  // That encodes a wrong model of Help Scout: thread `status` is the CONVERSATION's status
+  // when the thread was written, so a draft on a pending/closed ticket is still a real,
+  // unsent draft. Verified live 2026-08-19 — see isDraftReply in api-client.ts.
+  it('lists unsent message drafts regardless of the conversation status stamped on them', async () => {
     const longBody = 'x'.repeat(350);
     fetchMock.mockResolvedValueOnce(
       paginatedThreads(
@@ -1241,7 +1245,9 @@ describe('HelpScoutClient', () => {
 
     const drafts = await client.listDraftReplies(123);
 
-    expect(drafts).toHaveLength(1);
+    // 11 (status active) AND 14 (status pending) — both are unsent drafts.
+    expect(drafts).toHaveLength(2);
+    expect(drafts.map((draft) => draft.threadId)).toEqual([11, 14]);
     expect(drafts[0]).toEqual(
       expect.objectContaining({
         conversationId: 123,
@@ -1395,7 +1401,6 @@ describe('HelpScoutClient', () => {
 
   it.each([
     ['published state', { state: 'published' }],
-    ['inactive status', { status: 'pending' }],
     ['non-message type', { type: 'note' }],
   ])('rejects post-write verification for %s', async (_label, override) => {
     fetchMock

@@ -264,6 +264,8 @@ All draft-reply commands and MCP tools preserve the never-send boundary: they on
 
 Help Scout's official Inbox API does not expose an endpoint to delete or discard a draft reply thread. Discard unwanted drafts in the Help Scout web UI.
 
+That boundary covers the draft-reply surface specifically — it is not a claim that this tool never sends. The CLI has no send command at all, but the MCP tool **`create_reply` does send a reply that is immediately visible to the customer**. It is the one live-send path here, it is annotated as mutating, and it is deliberately absent from the CLI so that sending is always an explicit, separate act.
+
 ## Options
 
 | Flag | Description |

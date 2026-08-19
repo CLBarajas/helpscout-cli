@@ -515,7 +515,9 @@ const draftReplySchema = z.object({
   conversationId: z.number(),
   type: z.literal('message'),
   state: z.literal('draft'),
-  status: z.literal('active'),
+  // NOT z.literal('active'): a draft written on a pending/closed conversation carries that
+  // status, and a literal here would fail output validation for the whole result set.
+  status: z.string().optional(),
   body: z.string(),
   preview: z.string(),
   createdAt: z.string(),
@@ -1944,7 +1946,7 @@ server.registerTool(
   }
 );
 
-rememberTool('create_draft_reply', 'Create a draft reply on an existing conversation (saves without sending). Use this when responding to an existing ticket — the draft is reviewed and sent from the Help Scout UI. For starting a brand-new outbound conversation, use create_draft_conversation instead.');
+rememberTool('create_draft_reply', 'Create an additional draft reply on an existing conversation and verify its returned thread (saves without sending; the draft is reviewed and sent from the Help Scout UI). Prefer upsert_draft_reply when duplicate drafts are not intended. For starting a brand-new outbound conversation, use create_draft_conversation instead.');
 server.registerTool(
   'create_draft_reply',
   {

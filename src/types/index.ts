@@ -154,7 +154,9 @@ export interface DraftReply {
   conversationId: number;
   type: 'message';
   state: 'draft';
-  status: 'active';
+  // The conversation's status when the draft was written, not a draft-lifecycle value —
+  // and absent on some thread types. See isDraftReply in api-client.ts.
+  status?: string;
   body: string;
   preview: string;
   createdAt: string;

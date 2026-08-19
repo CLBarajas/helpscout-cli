@@ -234,12 +234,21 @@ describe('Help Scout MCP server helpers', () => {
         draft: { ...result.draft, state: 'published' },
       })
     ).toThrow();
-    expect(() =>
+    // A draft written on a pending or closed conversation carries THAT status — Help Scout
+    // stamps the conversation's status onto the thread. Upstream asserted this threw; that
+    // would 32602 the whole call for a legitimate draft, the same defect class as the
+    // subject-less `subject` literal. It must parse.
+    expect(
       draftReplyWriteOutputSchema.parse({
         ...result,
         draft: { ...result.draft, status: 'pending' },
       })
-    ).toThrow();
+    ).toBeTruthy();
+    // `status` is also absent on some thread types, so it must be optional, not just loose.
+    const { status: _status, ...draftWithoutStatus } = result.draft;
+    expect(
+      draftReplyWriteOutputSchema.parse({ ...result, draft: draftWithoutStatus })
+    ).toBeTruthy();
   });
 });
 
