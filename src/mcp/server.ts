@@ -1159,14 +1159,14 @@ server.registerTool(
 
 rememberTool(
   'search_conversations',
-  'Search conversations matching a query, across all pages. Filter by assignee with assignedTo (a user id) to fetch everything assigned to someone server-side. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. WARNING: Compound query-string filters are unreliable — use one filter per call.'
+  'Search conversations matching a query, across all pages. Filter by assignee with assignedTo (a user id, or a team id from list_teams) to fetch everything assigned to someone server-side. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. WARNING: Compound query-string filters are unreliable — use one filter per call.'
 );
 server.registerTool(
   'search_conversations',
   {
     title: 'Search Conversations',
     description:
-      'Search conversations matching a query, across all result pages. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. assignedTo (a user id), mailbox, and tag all filter server-side and compose with status — prefer them over encoding the same filter into `query`. WARNING: Compound query-string filters are unreliable — use one filter per call.',
+      'Search conversations matching a query, across all result pages. Results are capped by maxResults (default 25). If results are truncated, use date filters or more specific search terms to narrow. assignedTo (a user id, or a team id from list_teams), mailbox, and tag all filter server-side and compose with status — prefer them over encoding the same filter into `query`. WARNING: Compound query-string filters are unreliable — use one filter per call.',
     inputSchema: {
       query: z
         .string()
@@ -1182,7 +1182,7 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          'User ID to filter by assignee (server-side, across all pages). Get the id from list_users.'
+          'User or team ID to filter by assignee (server-side, across all pages). Get a user id from list_users, a team id from list_teams — Help Scout assigns to either.'
         ),
       mailbox: z
         .string()
@@ -1247,7 +1247,7 @@ server.registerTool(
         .string()
         .optional()
         .describe(
-          'User ID to filter by assignee (server-side). Get the id from list_users.'
+          'User or team ID to filter by assignee (server-side). Get a user id from list_users, a team id from list_teams — Help Scout assigns to either.'
         ),
       maxResults: z
         .number()

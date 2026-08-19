@@ -62,6 +62,20 @@ export const WORKFLOW_LIST_PARAMS: QueryParamSpec = {
   page: 'page',
 };
 
+// List Tags (GET /v2/tags) and List Mailboxes (GET /v2/mailboxes). Both take only
+// `page` today, so these specs buy nothing at this instant — they exist so the gate is
+// UNIVERSAL across list endpoints. These two were the last ones building their query
+// inline, which is exactly how `assignedTo` became a silent no-op in the first place:
+// not by anyone choosing wrongly, but by a filter being added at a call site that had
+// no spec to check it against.
+export const TAG_LIST_PARAMS: QueryParamSpec = {
+  page: 'page',
+};
+
+export const MAILBOX_LIST_PARAMS: QueryParamSpec = {
+  page: 'page',
+};
+
 // Translate a caller-facing params object into the exact query keys Help Scout expects.
 // - Renames each key per `spec` (e.g. assignedTo -> assigned_to).
 // - Skips `undefined` values (an absent filter, not an empty one).

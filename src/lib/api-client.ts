@@ -1,9 +1,11 @@
 import { auth } from './auth.js';
 import { HelpScoutCliError, HelpScoutApiError } from './errors.js';
-import { normalizeBodyText } from './output.js';
+import { storedBodyMatches } from './output.js';
 import {
   CONVERSATION_LIST_PARAMS,
   CUSTOMER_LIST_PARAMS,
+  MAILBOX_LIST_PARAMS,
+  TAG_LIST_PARAMS,
   USER_LIST_PARAMS,
   WORKFLOW_LIST_PARAMS,
   buildWireParams,
@@ -971,11 +973,7 @@ export class HelpScoutClient {
   ): Promise<DraftReplyWriteResult> {
     const threads = await this.getConversationThreads(conversationId);
     const thread = threads.find((candidate) => candidate.id === threadId);
-    if (
-      !thread ||
-      !isDraftReply(thread) ||
-      normalizeBodyText(thread.body) !== normalizeBodyText(expectedText)
-    ) {
+    if (!thread || !isDraftReply(thread) || !storedBodyMatches(thread.body, expectedText)) {
       throw new HelpScoutCliError(
         `Draft reply ${action} but post-write verification failed for thread ${threadId}: expected an unsent draft with the requested text`,
         502
@@ -1532,7 +1530,7 @@ export class HelpScoutClient {
   // Tags
   async listTags(page?: number) {
     const response = await this.request<PaginatedResponse<{ tags: Tag[] }>>('GET', '/tags', {
-      params: { page },
+      params: buildWireParams({ page }, TAG_LIST_PARAMS),
     });
     return {
       tags: response._embedded?.tags || [],
@@ -1574,7 +1572,7 @@ export class HelpScoutClient {
     const response = await this.request<PaginatedResponse<{ mailboxes: Mailbox[] }>>(
       'GET',
       '/mailboxes',
-      { params: { page } }
+      { params: buildWireParams({ page }, MAILBOX_LIST_PARAMS) }
     );
     return {
       mailboxes: response._embedded?.mailboxes || [],

@@ -1280,6 +1280,26 @@ describe('HelpScoutClient', () => {
     );
   });
 
+  // A support reply containing an angle-bracketed placeholder — `<Command-Q>`,
+  // `<your license key>` — round-trips fine, but comparing both sides through the
+  // HTML parser deleted it from the EXPECTED side only, so verification failed and
+  // threw 502 for a draft that had been written. That is the duplicate-reply trap
+  // the draft lifecycle exists to prevent. See storedBodyMatches in output.ts.
+  it('verifies a draft whose plain-text angle brackets Help Scout escaped', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(11, 'Press &lt;Command-Q&gt; to quit')], 1, 1)
+      );
+
+    const result = await client.updateDraftReply(123, 11, 'Press <Command-Q> to quit');
+
+    expect(result).toEqual(
+      expect.objectContaining({ threadId: 11, action: 'updated', verified: true })
+    );
+  });
+
   it('verifies plain-text newlines after Help Scout converts them to br tags', async () => {
     fetchMock
       .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
