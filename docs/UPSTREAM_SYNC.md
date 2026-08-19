@@ -69,24 +69,18 @@ violates it and the whole call fails with `-32602`.
 local gates can only tell you the two sides were reconciled, never that the imported belief about
 the API is true.
 
-### Open items found by the post-merge review (none blocking)
+### Open items found by the post-merge review
 
-| Item | Where | Call |
-|---|---|---|
-| `--user` silently no-ops when a draft already exists | `conversations.ts` draft-reply → `upsertDraftReply` forwards `user` only on the create branch | Arguably correct (attribution is fixed at creation) but the flag accepts a value and ignores it. Warn, or drop it on the update path. |
-| `normalizeBodyText` deletes angle-bracketed plain text | `output.ts` | **Mechanism proven, trigger unproven.** `normalizeBodyText('Press <Command-Q> to quit')` → `'Press to quit'`, while the stored escaped form keeps it, so verification could 502 on a reply containing `<your license key>`-style placeholders. Confirming needs a live write, so it is recorded, not patched. |
-| No `TAG_LIST_PARAMS` / `MAILBOX_LIST_PARAMS` | `query-params.ts` | `listTags` / `listMailboxes` are the only list endpoints outside the known-key gate (they took upstream's inline `{ page }`). No live bug — single identity-mapped key — but the gate is no longer universal. |
-| #66's "user or team ID" wording landed at 2 sites, not 6 | `server.ts` search_conversations / get_conversations_summary still say "user id" | Cosmetic, but the fork now says two different things about one filter. |
-| `createDraftConversation` still creates blind | `api-client.ts` | #65's verification was applied to `createDraftReply` only; upstream has no outbound counterpart. Fork-side follow-up, and it should be sequenced *after* the `status` fix above. |
+Four of the six were closed 2026-08-19 (`afc320f`, plus `70d65ad` for the `status` guard).
 
-### Still owed on the merged surface
-
-The **user-attribution fix is ×3, not ×2** (re-scoped 2026-08-19 after the merge): the MCP
-handlers for `create_draft_reply`, `create_draft_conversation`, **and now `upsert_draft_reply`**
-never pass `user`, so drafts are attributed to the OAuth app identity rather than the acting
-user. The client layer supports it on all three (`createDraftReply`/`createDraftConversation`
-take `user?: number`; `upsertDraftReply` forwards it to create). `updateDraftReply` is correctly
-excluded — it PATCHes text on an existing thread, and attribution is fixed at creation.
+| Item | Status |
+|---|---|
+| `isDraftReply` required `status === 'active'` | ✅ **FIXED** `70d65ad` — see the do-not-restore note above. |
+| `normalizeBodyText` deleted angle-bracketed plain text, throwing 502 for a draft that was written | ✅ **FIXED** `afc320f` — `storedBodyMatches` also accepts the stored body rendering to the caller's text with whitespace collapsed. Locked by a test that fails against the old comparison. |
+| `listTags` / `listMailboxes` outside the known-key gate | ✅ **FIXED** `afc320f` — `TAG_LIST_PARAMS` / `MAILBOX_LIST_PARAMS`. Buys nothing today (both take only `page`); the point is that the gate is now universal, because an ungated call site is how `assignedTo` became a silent no-op. |
+| #66's "user or team ID" wording reached 2 of 6 sites | ✅ **FIXED** `afc320f` — and the claim was **verified live first**: `assigned_to=322673` (the Support *team*) returns 25/25 conversations assigned to that team against a mixed control. Team IDs really do filter; descriptions now point at `list_teams` too. |
+| `--user` accepted but ignored when a draft already exists | ⏳ **OPEN, and lower stakes than it looked.** `upsertDraftReply` forwards `user` only on the create branch, so on update the flag silently does nothing. Given the attribution finding above it is an *override* being ignored, not a misattribution. Either warn, or drop the option from the update path. |
+| `createDraftConversation` creates without post-write verification | ⏳ **OPEN, and narrower than reported.** It does validate the `Location` header and throws if it cannot parse an id; what it lacks is `createDraftReply`'s re-read confirming the draft body landed. Worth adding for symmetry, but note the failure mode to avoid: a verification throw must not imply the conversation was *not* created. |
 
 Unmerged upstream **branches** exist but none are on `main`, so a wholesale merge ignores them:
 `chore/zod-v4-compat-pin`, `chore/typescript-7-lockfile`, `feat/attachment-download`,
