@@ -82,6 +82,66 @@ describe('Help Scout MCP server helpers', () => {
     ).toBe(true);
   });
 
+  // Locks the subject-less conversation defect (same family as the
+  // customFields[].type test above): Help Scout omits empty string fields
+  // rather than sending "", so a conversation created from a subject-less
+  // email has NO `subject` key. With `subject` required, one such conversation
+  // failed output validation for the whole result set on search_conversations,
+  // list_conversations, and search_by_customer. This payload mirrors the real
+  // shape of HS conversation 3413928237 (#188422), one of four live specimens.
+  it('validates conversations without a `subject` (real omit-when-empty shape)', () => {
+    const conversationWithoutSubject = {
+      id: 3413928237,
+      number: 188422,
+      type: 'email',
+      folderId: 3486258,
+      status: 'closed',
+      state: 'published',
+      // no `subject` key at all — Help Scout omits it, not sends ""
+      preview: 'Hi there, Unfortunately we received this log from Airfoil Satellite...',
+      mailboxId: 164710,
+      createdAt: '2026-08-10T13:02:11Z',
+      closedAt: '2026-08-10T14:49:00Z',
+      source: { type: 'email', via: 'customer' },
+      primaryCustomer: { id: 260017343, type: 'customer' },
+      customFields: [{ id: 23657, name: 'App', value: '116016', text: 'Airfoil Satellite' }],
+    };
+
+    expect(
+      mcpServer.outputSchemasForTesting.searchConversations.safeParse({
+        conversations: [conversationWithoutSubject],
+      }).success
+    ).toBe(true);
+    expect(
+      mcpServer.outputSchemasForTesting.listConversations.safeParse({
+        conversations: [conversationWithoutSubject],
+        page: { size: 25, totalElements: 1, totalPages: 1, number: 1 },
+      }).success
+    ).toBe(true);
+    expect(
+      mcpServer.outputSchemasForTesting.searchByCustomer.safeParse({
+        conversations: [conversationWithoutSubject],
+        meta: {
+          email: 'customer@example.com',
+          domain: 'example.com',
+          domainSearchSkipped: false,
+          emailResults: 1,
+          domainResults: 0,
+          totalAfterDedup: 1,
+        },
+      }).success
+    ).toBe(true);
+
+    // `preview` is the same omit-when-empty class (first thread with no body),
+    // relaxed alongside subject even though the 60-day audit never caught it absent.
+    const { preview: _preview, ...conversationWithoutPreview } = conversationWithoutSubject;
+    expect(
+      mcpServer.outputSchemasForTesting.searchConversations.safeParse({
+        conversations: [conversationWithoutPreview],
+      }).success
+    ).toBe(true);
+  });
+
   // Help Scout system-action threads (assigned/moved/merged) carry
   // action.associatedEntities. The action sub-object must stay passthrough so
   // its closed JSON output schema doesn't reject real payloads downstream.

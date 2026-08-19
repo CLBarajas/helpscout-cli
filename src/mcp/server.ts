@@ -298,8 +298,13 @@ const conversationSchema = z
     folderId: z.number().optional(),
     status: z.string(),
     state: z.string(),
-    subject: z.string(),
-    preview: z.string(),
+    // Help Scout omits empty string fields rather than sending "": a
+    // conversation with no subject (e.g. created from a subject-less email)
+    // has NO `subject` key, and one such conversation fails validation for the
+    // entire result set. `preview` is relaxed with it as the same omit-when-empty
+    // class (a conversation whose first thread has no body).
+    subject: z.string().optional(),
+    preview: z.string().optional(),
     mailboxId: z.number(),
     assignee: personSchema.optional(),
     createdBy: personSchema.optional(),
