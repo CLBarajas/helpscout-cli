@@ -25,7 +25,7 @@ place to rot instead of several.
 
 | Merged | Upstream point | Fork commit | Notes |
 |--------|----------------|-------------|-------|
-| 2026-08-19 | `upstream/main` @ `dd4b7a5` (tag `v2.18.3`) | `e5975fc` | All 4 commits taken. **ADOPTED #64/#65** (draft lifecycle: list/update/upsert + normalized post-write verification). **KEPT FORK for #66/#67** — upstream independently reimplemented the fork's `assigned_to` fix and its query-wire-contract idea; ours is broader (reusable per-endpoint specs + off-spec drop-and-warn), and upstream's 3 assignee tests were adopted anyway and pass against it. 11 conflict hunks / 6 files. Resolving `api-client.ts` hunk 5 as ours also removed a duplicate `listUsers` (hazard 1 recurrence). Gates: typecheck 0, lint 0, **158/158** (was 130), build OK. Beyond gates: real-stdio `tools/list` = 172 tools, all 2020-12, registered tools **110 -> 113 with zero lost**; live-verified subject-less search, the `assignedTo` filter, and `list_draft_replies`. |
+| 2026-08-19 | `upstream/main` @ `dd4b7a5` (tag `v2.18.3`) | `e5975fc` | All 4 commits taken. **ADOPTED #64/#65** (draft lifecycle: list/update/upsert + normalized post-write verification). **KEPT FORK for #66/#67** — upstream independently reimplemented the fork's `assigned_to` fix and its query-wire-contract idea; ours is broader (reusable per-endpoint specs + off-spec drop-and-warn), and upstream's 3 assignee tests were adopted anyway and pass against it. 11 conflict hunks / 6 files. Resolving `api-client.ts` hunk 5 as ours also removed a duplicate `listUsers` (hazard 1 recurrence). Gates: typecheck 0, lint 0, **158/158** (was 130), build OK. Beyond gates: real-stdio `tools/list` = 172 tools, all 2020-12, registered tools **110 -> 113 with zero lost** (literal `registerTool('name'` calls; the Docs and expanded-reports families register by loop over `tool.name`, so the served total is 172 — a set-diff across the merge confirmed zero fork tools dropped either way); live-verified subject-less search, the `assignedTo` filter, and `list_draft_replies`. |
 | 2026-08-05 | `upstream/main` @ `6d0f577` (tag `v2.17.1`) | `b6eca0a` (+ `c0f673e`) | All 7 commits taken. **zod 3.25.76 → 4.4.3** and **TypeScript 6 → 7** both land here; TS 7 split into its own commit (`c0f673e`) so a red typecheck would have one cause. Draft-reply customer fix closes our own #48. Attachment download adopted (see below). Gates: typecheck 0, lint 0, **123/123** tests (was 110), build OK. Conflicts: bun.lock (regenerated), package.json (hand-assembled), `conversations.ts`, `api-client.test.ts`, `mcp/server.ts`. **Two files merged *silently* and needed hand-fixing — see "Merge hazards proven real" below.** |
 | 2026-07-08 | `upstream/main` @ `dc1b7a6` (#58 dep bumps) | `bfe0d84` | commander 15 + html-to-text 10 + TS 6 adopted (typecheck / 89 tests / build all green); zod held at 3.x by upstream itself; kept fork's `mime-types`. Conflicts: package.json (adjacent adds) + bun.lock (regenerated) |
 | 2026-06-23 | `upstream/main` @ `38901b2` (v2.16.1 + #51) | `09a8606` | #50 output-schema passthrough + #51 CI bump |
@@ -47,6 +47,37 @@ budget for it: **the conflict count now tracks feature overlap, not upstream's d
 Upstream's tests for a reimplemented feature are still worth adopting: all three of #66's
 assignee tests pass unmodified against the fork's own `buildWireParams` implementation, which is
 free extra coverage and an early-warning tripwire if the two designs ever diverge.
+
+### ⚠️ One adopted upstream guard was WRONG for our data — patched in `70d65ad`
+
+**Do not "restore upstream behavior" here on a future sync.** #65 tightened `isDraftReply` to
+require `status === 'active'`. Help Scout stamps a thread's `status` with the **conversation's**
+status when the thread is written — it is not a per-thread lifecycle field, and it is not even
+stable inside one conversation (verified live 2026-08-19: conversation `3374803075` has
+`type: message` threads at both `closed` and `active`; 10/10 agent replies on `3194119012` are
+`closed`). `state` is the real lifecycle field and is still required.
+
+Kept, it would have hidden any draft written on a pending/closed ticket and made
+`verifyDraftReply` throw 502 for a draft that **was** created — inviting the duplicate replies
+#64 exists to prevent. The assumption had reached four places: the guard, `toDraftReply`, the
+`DraftReply` type, and `draftReplySchema`'s `z.literal('active')` in the **MCP output schema** —
+that last one being the same defect class as the subject-less `subject` literal: real data
+violates it and the whole call fails with `-32602`.
+
+**Upstream's own fixtures encode the same wrong model**, which is exactly why this passed
+158/158. Three tests were flipped. A merge that is green is not a merge that is correct — the
+local gates can only tell you the two sides were reconciled, never that the imported belief about
+the API is true.
+
+### Open items found by the post-merge review (none blocking)
+
+| Item | Where | Call |
+|---|---|---|
+| `--user` silently no-ops when a draft already exists | `conversations.ts` draft-reply → `upsertDraftReply` forwards `user` only on the create branch | Arguably correct (attribution is fixed at creation) but the flag accepts a value and ignores it. Warn, or drop it on the update path. |
+| `normalizeBodyText` deletes angle-bracketed plain text | `output.ts` | **Mechanism proven, trigger unproven.** `normalizeBodyText('Press <Command-Q> to quit')` → `'Press to quit'`, while the stored escaped form keeps it, so verification could 502 on a reply containing `<your license key>`-style placeholders. Confirming needs a live write, so it is recorded, not patched. |
+| No `TAG_LIST_PARAMS` / `MAILBOX_LIST_PARAMS` | `query-params.ts` | `listTags` / `listMailboxes` are the only list endpoints outside the known-key gate (they took upstream's inline `{ page }`). No live bug — single identity-mapped key — but the gate is no longer universal. |
+| #66's "user or team ID" wording landed at 2 sites, not 6 | `server.ts` search_conversations / get_conversations_summary still say "user id" | Cosmetic, but the fork now says two different things about one filter. |
+| `createDraftConversation` still creates blind | `api-client.ts` | #65's verification was applied to `createDraftReply` only; upstream has no outbound counterpart. Fork-side follow-up, and it should be sequenced *after* the `status` fix above. |
 
 ### Still owed on the merged surface
 
