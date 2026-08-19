@@ -1,5 +1,6 @@
 import { auth } from './auth.js';
 import { HelpScoutCliError, HelpScoutApiError } from './errors.js';
+import { normalizeBodyText } from './output.js';
 import {
   CONVERSATION_LIST_PARAMS,
   CUSTOMER_LIST_PARAMS,
@@ -19,6 +20,8 @@ import type {
   CustomerPropertyDefinition,
   CustomerPropertyOperation,
   DraftConversationStatus,
+  DraftReply,
+  DraftReplyWriteResult,
   Webhook,
   WebhookInput,
   MailboxFolder,
@@ -329,6 +332,43 @@ async function toAttachmentDownload(response: Response): Promise<AttachmentDownl
     contentType: response.headers.get('Content-Type') ?? undefined,
     contentLength: contentLength ? parseInt(contentLength, 10) : undefined,
     contentDisposition: response.headers.get('Content-Disposition') ?? undefined,
+  };
+}
+
+const DRAFT_PREVIEW_LENGTH = 300;
+
+function isDraftReply(
+  thread: Thread
+): thread is Thread & { type: 'message'; state: 'draft'; status: 'active'; body: string } {
+  return (
+    thread.type === 'message' &&
+    thread.state === 'draft' &&
+    thread.status === 'active' &&
+    typeof thread.body === 'string'
+  );
+}
+
+function toDraftReply(
+  conversationId: number,
+  thread: Thread & { type: 'message'; state: 'draft'; status: 'active'; body: string }
+): DraftReply {
+  const preview =
+    thread.body.length > DRAFT_PREVIEW_LENGTH
+      ? `${thread.body.slice(0, DRAFT_PREVIEW_LENGTH).trim()}...`
+      : thread.body;
+  return {
+    threadId: thread.id,
+    conversationId,
+    type: thread.type,
+    state: thread.state,
+    status: thread.status,
+    body: thread.body,
+    preview,
+    createdAt: thread.createdAt,
+    createdBy: thread.createdBy,
+    to: thread.to,
+    cc: thread.cc,
+    bcc: thread.bcc,
   };
 }
 
@@ -837,7 +877,7 @@ export class HelpScoutClient {
       text: string;
       user?: number;
     }
-  ) {
+  ): Promise<DraftReplyWriteResult> {
     const conversation = await this.getConversation(conversationId);
     const customerId = conversation?.primaryCustomer?.id;
     if (!customerId) {
@@ -845,9 +885,99 @@ export class HelpScoutClient {
         `Cannot create draft reply: conversation ${conversationId} has no primary customer`
       );
     }
-    await this.request<void>('POST', `/conversations/${conversationId}/reply`, {
+    const response = await this.rawRequest('POST', `/conversations/${conversationId}/reply`, {
       body: { ...data, customer: { id: customerId }, draft: true },
     });
+    const resourceId = response.headers.get('Resource-ID');
+    const threadId = resourceId && /^\d+$/.test(resourceId) ? Number(resourceId) : NaN;
+    if (!Number.isSafeInteger(threadId) || threadId <= 0) {
+      throw new HelpScoutCliError(
+        'Draft reply created but Help Scout did not return a valid Resource-ID thread header',
+        502
+      );
+    }
+    return this.verifyDraftReply(conversationId, threadId, data.text, 'created');
+  }
+
+  async listDraftReplies(conversationId: number): Promise<DraftReply[]> {
+    const threads = await this.getConversationThreads(conversationId);
+    return threads.filter(isDraftReply).map((thread) => toDraftReply(conversationId, thread));
+  }
+
+  async updateDraftReply(
+    conversationId: number,
+    threadId: number,
+    text: string
+  ): Promise<DraftReplyWriteResult> {
+    const threads = await this.getConversationThreads(conversationId);
+    const thread = threads.find((candidate) => candidate.id === threadId);
+    if (!thread) {
+      throw new HelpScoutCliError(
+        `Cannot update draft reply: thread ${threadId} does not exist in conversation ${conversationId}`,
+        404
+      );
+    }
+    if (!isDraftReply(thread)) {
+      throw new HelpScoutCliError(
+        `Refusing to update thread ${threadId}: expected an active draft reply (type message, state draft, status active), found type ${thread.type}, state ${thread.state ?? 'unknown'}, status ${thread.status ?? 'unknown'}`,
+        409
+      );
+    }
+
+    await this.request<void>('PATCH', `/conversations/${conversationId}/threads/${threadId}`, {
+      body: { op: 'replace', path: '/text', value: text },
+    });
+    return this.verifyDraftReply(conversationId, threadId, text, 'updated');
+  }
+
+  async upsertDraftReply(
+    conversationId: number,
+    data: { text: string; user?: number; threadId?: number }
+  ): Promise<DraftReplyWriteResult> {
+    if (data.threadId !== undefined) {
+      return this.updateDraftReply(conversationId, data.threadId, data.text);
+    }
+
+    const drafts = await this.listDraftReplies(conversationId);
+    if (drafts.length === 0) {
+      return this.createDraftReply(conversationId, { text: data.text, user: data.user });
+    }
+    if (drafts.length === 1) {
+      return this.updateDraftReply(conversationId, drafts[0].threadId, data.text);
+    }
+
+    const ids = drafts.map((draft) => draft.threadId).join(', ');
+    throw new HelpScoutCliError(
+      `Refusing to choose among ${drafts.length} active draft replies (${ids}). Specify the intended thread ID explicitly.`,
+      409
+    );
+  }
+
+  private async verifyDraftReply(
+    conversationId: number,
+    threadId: number,
+    expectedText: string,
+    action: DraftReplyWriteResult['action']
+  ): Promise<DraftReplyWriteResult> {
+    const threads = await this.getConversationThreads(conversationId);
+    const thread = threads.find((candidate) => candidate.id === threadId);
+    if (
+      !thread ||
+      !isDraftReply(thread) ||
+      normalizeBodyText(thread.body) !== normalizeBodyText(expectedText)
+    ) {
+      throw new HelpScoutCliError(
+        `Draft reply ${action} but post-write verification failed for thread ${threadId}: expected an unsent draft with the requested text`,
+        502
+      );
+    }
+    return {
+      conversationId,
+      threadId,
+      action,
+      verified: true,
+      draft: toDraftReply(conversationId, thread),
+    };
   }
 
   async createReply(
@@ -1392,7 +1522,7 @@ export class HelpScoutClient {
   // Tags
   async listTags(page?: number) {
     const response = await this.request<PaginatedResponse<{ tags: Tag[] }>>('GET', '/tags', {
-      params: page ? { page } : undefined,
+      params: { page },
     });
     return {
       tags: response._embedded?.tags || [],
@@ -1434,7 +1564,7 @@ export class HelpScoutClient {
     const response = await this.request<PaginatedResponse<{ mailboxes: Mailbox[] }>>(
       'GET',
       '/mailboxes',
-      { params: page ? { page } : undefined }
+      { params: { page } }
     );
     return {
       mailboxes: response._embedded?.mailboxes || [],

@@ -10,7 +10,23 @@ function thread(id: number, type = 'customer') {
   };
 }
 
-function paginatedThreads(threads: Array<Record<string, unknown>>, page: number, totalPages: number) {
+function draftThread(id: number, body = `<p>Draft ${id}</p>`) {
+  return {
+    id,
+    type: 'message',
+    status: 'active',
+    state: 'draft',
+    body,
+    createdAt: `2026-06-0${id}T00:00:00Z`,
+    createdBy: { id: 42, type: 'user', first: 'Ada', last: 'Lovelace' },
+  };
+}
+
+function paginatedThreads(
+  threads: Array<Record<string, unknown>>,
+  page: number,
+  totalPages: number
+) {
   return Response.json({
     _embedded: { threads },
     page: {
@@ -19,6 +35,29 @@ function paginatedThreads(threads: Array<Record<string, unknown>>, page: number,
       totalPages,
       number: page,
     },
+  });
+}
+
+function paginatedConversations(
+  conversations: Array<Record<string, unknown>>,
+  page: number,
+  totalPages: number
+) {
+  return Response.json({
+    _embedded: { conversations },
+    page: {
+      size: conversations.length,
+      totalElements: totalPages,
+      totalPages,
+      number: page,
+    },
+  });
+}
+
+function paginatedResource(resource: string) {
+  return Response.json({
+    _embedded: { [resource]: [] },
+    page: { size: 0, totalElements: 0, totalPages: 0, number: 1 },
   });
 }
 
@@ -1016,12 +1055,139 @@ describe('HelpScoutClient', () => {
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.helpscout.net/v2/customers/42');
   });
 
-  it('includes the primary customer when creating a draft reply', async () => {
+  it('serializes the idiomatic assignee option to the Help Scout wire name', async () => {
+    fetchMock.mockResolvedValueOnce(paginatedConversations([], 1, 1));
+
+    await client.listConversations({ assignedTo: '728656' });
+
+    const url = new URL(fetchMock.mock.calls[0][0]);
+    expect(url.searchParams.get('assigned_to')).toBe('728656');
+    expect(url.searchParams.has('assignedTo')).toBe(false);
+  });
+
+  it('preserves status, sort, query, and page while mapping a team assignee ID', async () => {
+    fetchMock.mockResolvedValueOnce(paginatedConversations([], 3, 3));
+
+    await client.listConversations({
+      status: 'all',
+      assignedTo: '987654',
+      sortField: 'modifiedAt',
+      sortOrder: 'asc',
+      query: 'assigned:"Questionnaires"',
+      page: 3,
+    });
+
+    const url = new URL(fetchMock.mock.calls[0][0]);
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      status: 'all',
+      assigned_to: '987654',
+      sortField: 'modifiedAt',
+      sortOrder: 'asc',
+      query: 'assigned:"Questionnaires"',
+      page: '3',
+    });
+  });
+
+  it('keeps the mapped assignee filter on every conversation page', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedConversations([{ id: 1 }], 1, 2))
+      .mockResolvedValueOnce(paginatedConversations([{ id: 2 }], 2, 2));
+
+    const conversations = await client.listAllConversations({
+      status: 'active',
+      assignedTo: '728656',
+      query: 'assigned:"Questionnaires"',
+    });
+
+    expect(conversations).toEqual([{ id: 1 }, { id: 2 }]);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    for (const [index, call] of fetchMock.mock.calls.entries()) {
+      const url = new URL(call[0]);
+      expect(url.searchParams.get('assigned_to')).toBe('728656');
+      expect(url.searchParams.has('assignedTo')).toBe(false);
+      expect(url.searchParams.get('page')).toBe(String(index + 1));
+      expect(url.searchParams.get('status')).toBe('active');
+      expect(url.searchParams.get('query')).toBe('assigned:"Questionnaires"');
+    }
+  });
+
+  it.each([
+    {
+      name: 'customers',
+      resource: 'customers',
+      path: '/customers',
+      invoke: () =>
+        client.listCustomers({
+          mailbox: '42',
+          firstName: 'Ada',
+          lastName: 'Lovelace',
+          sortField: 'modifiedAt',
+          sortOrder: 'asc',
+          page: 3,
+          query: 'email:ada@example.com',
+        }),
+      expected: {
+        mailbox: '42',
+        firstName: 'Ada',
+        lastName: 'Lovelace',
+        sortField: 'modifiedAt',
+        sortOrder: 'asc',
+        page: '3',
+        query: 'email:ada@example.com',
+      },
+    },
+    {
+      name: 'users',
+      resource: 'users',
+      path: '/users',
+      invoke: () => client.listUsers({ email: 'ada@example.com', mailbox: 42, page: 2 }),
+      expected: { email: 'ada@example.com', mailbox: '42', page: '2' },
+    },
+    {
+      name: 'tags',
+      resource: 'tags',
+      path: '/tags',
+      invoke: () => client.listTags(4),
+      expected: { page: '4' },
+    },
+    {
+      name: 'workflows',
+      resource: 'workflows',
+      path: '/workflows',
+      invoke: () => client.listWorkflows({ mailbox: 42, type: 'manual', page: 5 }),
+      expected: { mailboxId: '42', type: 'manual', page: '5' },
+    },
+    {
+      name: 'mailboxes',
+      resource: 'mailboxes',
+      path: '/mailboxes',
+      invoke: () => client.listMailboxes(6),
+      expected: { page: '6' },
+    },
+  ])('serializes the $name list endpoint with its exact wire contract', async (testCase) => {
+    fetchMock.mockResolvedValueOnce(paginatedResource(testCase.resource));
+
+    await testCase.invoke();
+
+    const url = new URL(fetchMock.mock.calls[0][0]);
+    expect(url.pathname).toBe(`/v2${testCase.path}`);
+    expect(Object.fromEntries(url.searchParams)).toEqual(testCase.expected);
+  });
+
+  it('creates a draft reply, parses Resource-ID, and verifies the live thread', async () => {
     fetchMock
       .mockResolvedValueOnce(Response.json({ primaryCustomer: { id: 729732479 } }))
-      .mockResolvedValueOnce(new Response(null, { status: 201 }));
+      .mockResolvedValueOnce(
+        new Response(null, { status: 201, headers: { 'Resource-ID': '10420000001' } })
+      )
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(10420000001, '<p>Draft reply</p>')], 1, 1)
+      );
 
-    await client.createDraftReply(3401014297, { text: '<p>Draft reply</p>', user: 903917 });
+    const result = await client.createDraftReply(3401014297, {
+      text: '<p>Draft reply</p>',
+      user: 903917,
+    });
 
     expect(fetchMock.mock.calls[0][0]).toBe(
       'https://api.helpscout.net/v2/conversations/3401014297'
@@ -1038,6 +1204,210 @@ describe('HelpScoutClient', () => {
         }),
       }),
     ]);
+    expect(result).toEqual(
+      expect.objectContaining({
+        conversationId: 3401014297,
+        threadId: 10420000001,
+        action: 'created',
+        verified: true,
+      })
+    );
+  });
+
+  it('fails creation when Help Scout omits the Resource-ID header', async () => {
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ primaryCustomer: { id: 729732479 } }))
+      .mockResolvedValueOnce(new Response(null, { status: 201 }));
+
+    await expect(client.createDraftReply(123, { text: 'Draft' })).rejects.toThrow(
+      'did not return a valid Resource-ID'
+    );
+  });
+
+  it('lists only active draft reply threads with safe selection metadata', async () => {
+    const longBody = 'x'.repeat(350);
+    fetchMock.mockResolvedValueOnce(
+      paginatedThreads(
+        [
+          draftThread(11, longBody),
+          { ...thread(12, 'message'), state: 'published' },
+          thread(13, 'note'),
+          { ...draftThread(14), status: 'pending' },
+        ],
+        1,
+        1
+      )
+    );
+
+    const drafts = await client.listDraftReplies(123);
+
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0]).toEqual(
+      expect.objectContaining({
+        conversationId: 123,
+        threadId: 11,
+        state: 'draft',
+        body: longBody,
+        preview: `${'x'.repeat(300)}...`,
+        createdBy: expect.objectContaining({ id: 42 }),
+      })
+    );
+  });
+
+  it('updates a specific draft with JSON Patch and verifies the result', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'New')], 1, 1));
+
+    const result = await client.updateDraftReply(123, 11, 'New');
+
+    expect(fetchMock.mock.calls[1]).toEqual([
+      'https://api.helpscout.net/v2/conversations/123/threads/11',
+      expect.objectContaining({
+        method: 'PATCH',
+        body: JSON.stringify({ op: 'replace', path: '/text', value: 'New' }),
+      }),
+    ]);
+    expect(result).toEqual(
+      expect.objectContaining({ threadId: 11, action: 'updated', verified: true })
+    );
+  });
+
+  it('verifies plain-text newlines after Help Scout converts them to br tags', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(11, 'First line<br>Second line')], 1, 1)
+      );
+
+    await expect(client.updateDraftReply(123, 11, 'First line\nSecond line')).resolves.toEqual(
+      expect.objectContaining({ verified: true })
+    );
+  });
+
+  it('verifies semantically equivalent HTML input', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(11, '<p>Hello <strong>there</strong></p>')], 1, 1)
+      );
+
+    await expect(client.updateDraftReply(123, 11, 'Hello <strong>there</strong>')).resolves.toEqual(
+      expect.objectContaining({ verified: true })
+    );
+  });
+
+  it('normalizes whitespace and newlines during verification', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(11, '<p>Hello there</p><p>Next line</p>')], 1, 1)
+      );
+
+    await expect(
+      client.updateDraftReply(123, 11, '  Hello   there\r\n\nNext line  ')
+    ).resolves.toEqual(expect.objectContaining({ verified: true }));
+  });
+
+  it('refuses to update a published or non-draft thread', async () => {
+    fetchMock.mockResolvedValueOnce(
+      paginatedThreads([{ ...thread(11, 'message'), state: 'published' }], 1, 1)
+    );
+
+    await expect(client.updateDraftReply(123, 11, 'New')).rejects.toThrow(
+      'expected an active draft reply'
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses an unknown thread ID before writing', async () => {
+    fetchMock.mockResolvedValueOnce(paginatedThreads([draftThread(11)], 1, 1));
+
+    await expect(client.updateDraftReply(123, 99, 'New')).rejects.toThrow('does not exist');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates on upsert when no active draft exists', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([], 1, 1))
+      .mockResolvedValueOnce(Response.json({ primaryCustomer: { id: 7 } }))
+      .mockResolvedValueOnce(new Response(null, { status: 201, headers: { 'Resource-ID': '22' } }))
+      .mockResolvedValueOnce(paginatedThreads([draftThread(22, 'Desired')], 1, 1));
+
+    const result = await client.upsertDraftReply(123, { text: 'Desired' });
+
+    expect(result.action).toBe('created');
+    expect(result.threadId).toBe(22);
+  });
+
+  it('updates the sole active draft on upsert', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Desired')], 1, 1));
+
+    const result = await client.upsertDraftReply(123, { text: 'Desired' });
+
+    expect(result.action).toBe('updated');
+    expect(result.threadId).toBe(11);
+  });
+
+  it('refuses ambiguous upsert when multiple active drafts exist', async () => {
+    fetchMock.mockResolvedValueOnce(paginatedThreads([draftThread(11), draftThread(12)], 1, 1));
+
+    await expect(client.upsertDraftReply(123, { text: 'Desired' })).rejects.toThrow(
+      'Refusing to choose among 2 active draft replies (11, 12)'
+    );
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses an explicit thread ID to disambiguate upsert', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(11, 'First'), draftThread(12, 'Second')], 1, 1)
+      )
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        paginatedThreads([draftThread(11, 'First'), draftThread(12, 'Desired')], 1, 1)
+      );
+
+    const result = await client.upsertDraftReply(123, { text: 'Desired', threadId: 12 });
+
+    expect(result.threadId).toBe(12);
+    expect(result.action).toBe('updated');
+  });
+
+  it('reports post-write verification failures without claiming success', async () => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1));
+
+    await expect(client.updateDraftReply(123, 11, 'Desired')).rejects.toThrow(
+      'post-write verification failed'
+    );
+  });
+
+  it.each([
+    ['published state', { state: 'published' }],
+    ['inactive status', { status: 'pending' }],
+    ['non-message type', { type: 'note' }],
+  ])('rejects post-write verification for %s', async (_label, override) => {
+    fetchMock
+      .mockResolvedValueOnce(paginatedThreads([draftThread(11, 'Old')], 1, 1))
+      .mockResolvedValueOnce(new Response(null, { status: 204 }))
+      .mockResolvedValueOnce(
+        paginatedThreads([{ ...draftThread(11, 'Desired'), ...override }], 1, 1)
+      );
+
+    await expect(client.updateDraftReply(123, 11, 'Desired')).rejects.toThrow(
+      'post-write verification failed'
+    );
   });
 
   it('sends private notes with optional status', async () => {
